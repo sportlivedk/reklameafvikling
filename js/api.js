@@ -71,5 +71,7 @@ if(LOGO_URL)document.addEventListener("DOMContentLoaded",()=>{const w=document.g
   const downloads={save:async({filename,data})=>{const ext=(filename.split(".").pop()||"").toLowerCase();const blob=new Blob([data instanceof Blob?data:new Blob([data])],{type:MIME[ext]||""});
     const url=URL.createObjectURL(blob);const a=document.createElement("a");a.href=url;a.download=filename;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),4000);return {status:"saved"};}};
   window.claude={use:async n=>({db,user,downloads})[n]||null};
-  window.__gas={st,load};
+  // Slet et break med alle dets bookinger i ét kald
+  async function deleteBreak(id){pending++;try{await call("deleteBreak",id);}finally{pending--;}await load();}
+  window.__gas={st,load,deleteBreak};
 })();

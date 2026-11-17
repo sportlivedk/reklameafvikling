@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="da">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SPORT LIVE Reklameafvikling</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Figtree:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/pdf-lib@1.17.1/dist/pdf-lib.min.js"></script>
+<link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+<header class="top">
+  <div class="topin">
+    <div class="brand"><span class="wm" id="wm">SPORT LIVE</span><small>Reklameafvikling</small></div>
+    <nav id="nav">
+      <a href="#dashboard">Overblik</a>
+      <a href="#planlaegning">Planlægning</a>
+      <a href="#ugeplan">Ugeplan</a>
+      <a href="#rapporter">Rapporter</a>
+      <a href="#indstillinger">Indstillinger</a>
+    </nav>
+    <span id="who" class="small muted" style="white-space:nowrap"></span><a href="#" id="logout" class="small" style="color:var(--muted)" onclick="slLogout();return false;" hidden>Log ud</a>
+    <div class="wk" id="wk">
+      <button class="btn icon" data-a="wk-prev" aria-label="Forrige uge">‹</button>
+      <div class="lbl" id="wklbl">Uge</div>
+      <button class="btn icon" data-a="wk-next" aria-label="Næste uge">›</button>
+      <button class="btn sm ghost" data-a="wk-now">Denne uge</button>
+      <span class="hist"><button class="btn sm" data-a="undo" id="undobtn" disabled title="Fortryd seneste ændring (Ctrl+Z)">↶ Fortryd</button><button class="btn sm ghost" data-a="hist" id="histbtn" aria-expanded="false" title="Seneste ændringer">Ændringer <span id="histn" class="hn">0</span></button><div id="histpop" class="histpop" hidden></div></span>
+      <button class="btn sm livebtn" data-a="live" id="livebtn" aria-pressed="false" title="Vis SPORT LIVE-signalet"><span class="ld" aria-hidden="true"></span>Live</button>
+    </div>
+  </div>
+</header>
+<main id="main"><div class="empty">Henter afviklingsdata…</div></main>
+<div id="modalroot"></div>
+<div id="actroot"></div>
+<div id="livebox" class="livebox" hidden></div>
+
+<script src="js/config.js"></script>
+<script src="js/api.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>

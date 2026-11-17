@@ -230,7 +230,7 @@ function vUgeplan(){
     const tot=bs.reduce((s2,b)=>s2+breakLen(y,w,b.id),0),totP=bs.reduce((s2,b)=>s2+breakLen(py,pw,b.id),0),totB=bs.reduce((s2,b)=>s2+baseLen(y,w,b.id),0);
     const totH=`<span class="note">I alt <b class="num" style="color:var(--ink)">${fmtDur(tot)}</b>${deltaHtml(tot-totB,"dlt")} · ${tot-totP>=0?"+":"−"}${Math.abs(tot-totP)}s mod uge ${pw}</span>`;
     const head=t==="Sponsorbreak"?`<span class="note">${b0.perDag||0} afmeldinger pr. dag (intro/outro)</span>`:
-      `<span class="note">Snit ${fmtDur(avg)} · Placeholder i MediaTool <b class="num" style="color:var(--ink)">${fmtDur(avg+(b0.buffer||0))}</b> (snit + ${b0.buffer||0} sek)</span>`;
+      `<div class="mtsum"><div><span>Gennemsnit alle breaks i sek.</span><b class="num">${Math.round(avg)}</b></div><div><span>Gennemsnit alle breaks i min.</span><b class="num">${fmtDur(Math.round(avg))}</b></div><div class="pl"><span>Placeholder tid i MediaTool</span><b class="num">${fmtDur(Math.round(avg)+(b0.buffer||0))}</b><small>snit + ${b0.buffer||0} sek</small></div></div>`;
     return `<section style="display:flex;flex-direction:column;gap:10px"><div class="row between"><div class="row" style="gap:14px"><h3>${t}s</h3>${totH}</div>${head}</div>
       <div class="hrow">${bs.map(b=>breakCard(b,y,w,py,pw,ny,nw)).join("")}</div></section>`;}).join("");
   const gk=S.godk[y+"-"+w];let changedAfter=[];
@@ -262,6 +262,7 @@ function breakCard(b,y,w,py,pw,ny,nw){
   const bump=items.length&&b.bumper?`<li class="bump"><span class="p">·</span><span class="nm">Breaker ind/ud</span><span></span><span class="sk">${b.bumper}s</span></li>`:"";
   return `<article class="card brk" data-dropb="${b.id}"><header><div><h3 style="font-size:16px">${esc(b.navn)}</h3><div class="note">${b.perDag} gange dagligt · ${items.length} spots</div></div><div style="text-align:right"><div class="len${maksOf(b)&&L>maksOf(b)?" over":""}" ${maksOf(b)&&L>maksOf(b)?`title="Over maks længde ${fmtDur(maksOf(b))}"`:""}>${fmtDur(L)}${deltaHtml(dBase,"dlt")}</div>${maksOf(b)&&L>maksOf(b)?`<div class="overtag">${fmtDur(L-maksOf(b))} over maks ${fmtDur(maksOf(b))}</div>`:""}<div class="note num">${dPrev?(dPrev>0?"+":"−")+Math.abs(dPrev)+"s":"±0s"} mod uge ${pw}</div></div></header>
     ${cfs.length?`<div class="cfl">Brancheregel brudt: ${cfs.map(c=>esc(c[0]+" + "+c[1])).join(", ")}</div>`:""}<ol>${lis||`<li class="emptyli"><span></span><span class="muted small">Træk en kunde hertil</span><span></span><span></span></li>`}${bump}</ol>
+    <div class="tots">${b.type==="Sponsorbreak"?`<span>Total antal sekunder</span><b class="num">${L}</b>`:`<span>Total antal sek.</span><b class="num">${L}</b><span>Total antal min.</span><b class="num">${fmtDur(L)}</b>`}</div>
     ${gone.length?`<footer><span>Udgår fra uge ${pw}: ${esc(gone.join(", "))}</span></footer>`:""}</article>`;
 }
 
@@ -859,8 +860,8 @@ async function move(breakId,id,dir){
 function weekRows(){const y=S.year,w=S.week;const out=[];for(const t of TYPES){for(const b of S.cfg.breaks.filter(x=>x.type===t)){const items=activeIn(y,w,b.id).sort(sortPos);
   items.forEach((x,i)=>out.push({Break:b.navn,Placering:i+1,Kunde:x.kunde,"Spot/filnavn":x.spot,Sek:x.sek,Kanal:x.kanal,Status:x.status,Note:x.note}));
   if(items.length&&b.bumper)out.push({Break:b.navn,Placering:"",Kunde:"Breaker ind/ud",Sek:b.bumper});
-  if(items.length)out.push({Break:b.navn,Placering:"",Kunde:"I ALT",Sek:breakLen(y,w,b.id),Kanal:fmtDur(breakLen(y,w,b.id))});}
-  if(t!=="Sponsorbreak"){const a=groupAvg(y,w,t),buf=(S.cfg.breaks.find(x=>x.type===t)||{}).buffer||0;out.push({Break:t+" snit",Sek:Math.round(a),Kanal:fmtDur(a),Note:"Placeholder MediaTool: "+fmtDur(a+buf)});}out.push({});}
+  if(items.length){const L=breakLen(y,w,b.id);if(t==="Sponsorbreak")out.push({Break:b.navn,Placering:"",Kunde:"Total antal sekunder",Sek:L});else{out.push({Break:b.navn,Placering:"",Kunde:"Total antal sek.",Sek:L});out.push({Break:b.navn,Placering:"",Kunde:"Total antal min.",Sek:fmtDur(L)});}}}
+  if(t!=="Sponsorbreak"){const a=Math.round(groupAvg(y,w,t)),buf=(S.cfg.breaks.find(x=>x.type===t)||{}).buffer||0;out.push({Break:t+"s",Kunde:"Gennemsnit alle breaks i sek.",Sek:a});out.push({Break:t+"s",Kunde:"Gennemsnit alle breaks i min.",Sek:fmtDur(a)});out.push({Break:t+"s",Kunde:"Placeholder tid i MediaTool",Sek:fmtDur(a+buf),Note:"snit + "+buf+" sek"});}out.push({});}
   return out;}
 async function saveXlsx(name,sheets){
   if(!window.XLSX){toast("Excel-modulet kunne ikke indlæses");return;}
@@ -935,7 +936,7 @@ document.addEventListener("click",async e=>{
     case "mv":await move(t.dataset.b,t.dataset.id,+t.dataset.d);break;
     case "rep-kunde":S.rf={...(S.rf||defaultRf()),kunde:t.dataset.k};location.hash="rapporter";render();break;
     case "rp":S.rf.fra=+t.dataset.fra;S.rf.til=+t.dataset.til;render();break;
-    case "copy-week":{const rows=weekRows();copyText(`Afviklingsliste uge ${S.week} (${weekLabel(S.year,S.week)})\n\n`+rows.map(r=>Object.keys(r).length?[r.Break,r.Placering,r.Kunde,r.Sek!=null?r.Sek+" sek":"",r.Note||""].filter(x=>x!==""&&x!=null).join("  ·  "):"").join("\n"));break;}
+    case "copy-week":{const rows=weekRows();copyText(`Afviklingsliste uge ${S.week} (${weekLabel(S.year,S.week)})\n\n`+rows.map(r=>Object.keys(r).length?[r.Break,r.Placering,r.Kunde,r.Sek!=null?(typeof r.Sek==="number"?r.Sek+" sek":r.Sek):"",r.Note||""].filter(x=>x!==""&&x!=null).join("  ·  "):"").join("\n"));break;}
     case "xlsx-week":saveXlsx(`Afvikling uge ${S.week} ${S.year}.xlsx`,[[`Uge ${S.week}`,weekRows()]]);break;
     case "xlsx-rep":{const R=repRows();saveXlsx(`Afviklingsrapport ${R.f.kunde||"alle kunder"} uge ${R.f.fra}-${R.f.til} ${R.f.year}.xlsx`,R.sheets);break;}
     case "copy-rep":{const R=repRows();const L=[`Afviklingsrapport: ${R.f.kunde||"alle kunder"}`,`Uge ${R.f.fra}–${R.f.til}, ${R.f.year}`,`Visninger: ${fmtN(R.A.tot.spots)}`,`Sendetid: ${fmtDur(R.A.tot.sek)}`,""];

@@ -7,7 +7,7 @@ window.SL_CONFIG = {
   API_URL: "https://script.google.com/macros/s/AKfycbz7MW0FAWEv7EJFcs-4pdCzig1Mm78Y1PLnggiywz8XKCUGNd90nRy8gmjESR57fJo-/exec",
 
   // Valgfrit logo i mappen assets, fx "assets/logo.png". Tom = tekstlogo.
-  LOGO_URL: "",
+  LOGO_URL: "assets/logo.png",
 
   // Hvor ofte siden tjekker, om andre har ændret noget (minutter).
   // Siden tjekker også, når man vender tilbage til fanen, og efter hver gemning.

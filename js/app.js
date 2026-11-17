@@ -16,6 +16,10 @@ const DEFAULT_BREAKS = [
   {id:"SB5",navn:"Sponsorbreak 5",type:"Sponsorbreak",perDag:4,bumper:0,buffer:0,snit:false},
 ];
 const TYPES = ["Reklamebreak","Powerbreak","Sponsorbreak"];
+const TPRE = {Reklamebreak:"RB",Powerbreak:"PB",Sponsorbreak:"SB"};
+// Ekstraordinære breaks: tæller kun med i kapacitet/belægning i uger, hvor de har spots
+const hasBookings = id => all().some(x=>x.breakId===id);
+const ekstraTag = b => b.ekstra?` <span class="xtag" title="Ekstraordinært break">Ekstra</span>`:"";
 const KANALER = ["SPORT LIVE","Castory","TVR","Distributør","Egen promo"];
 // Fra 2027 sælger Castory det, TVR solgte. Historikken før 2027 bevares som TVR.
 const KANAL_SKIFT = {fra:2027, gammel:"TVR", ny:"Castory"};
@@ -97,7 +101,7 @@ function render(){
   if(S.paint){S.dirty=true;return;}
   document.querySelectorAll("#nav a").forEach(a=>{if(a.getAttribute("href")==="#"+S.view)a.setAttribute("aria-current","page");else a.removeAttribute("aria-current");});
   $("#wklbl").innerHTML=`Uge ${S.week} <span>· ${esc(weekLabel(S.year,S.week))}</span>`;
-  $("#wk").style.visibility = (S.view==="rapporter"||S.view==="indstillinger")?"hidden":"visible";
+  {const hideW=(S.view==="rapporter"||S.view==="indstillinger");document.querySelectorAll("#wk [data-a=wk-prev],#wk [data-a=wk-next],#wk [data-a=wk-now],#wklbl").forEach(e=>e.style.display=hideW?"none":"");}
   const m=$("#main");
   if(S.err){m.innerHTML=`<div class="card pad"><h2>Data kan ikke hentes</h2><p class="muted">${esc(S.err)}</p></div>`;return;}
   if(!S.loaded){m.innerHTML=`<div class="empty">${S.slow?"Forbindelsen til databasen er langsom. Data vises, så snart den svarer.":"Henter afviklingsdata…"}</div>`;return;}
@@ -184,7 +188,7 @@ function vPlan(){
       return `<tr><td class="lc" title="${esc(x.kunde+(x.spot?" · "+x.spot:"")+(x.note?" · "+x.note:""))}"><div class="lci"><span class="sw" style="background:${kc}"></span><a href="#" data-a="edit" data-id="${esc(x.id)}">${esc(x.kunde)}</a><small>${x.sek}s</small>${ktag(x.kunde)}${x.status!=="Bekræftet"?` <span class="chip ${STCLS[x.status]}" style="font-size:10px;padding:0 5px">${esc(x.status)}</span>`:""}${S.canWrite!==false?`<span class="rowact"><button class="btn ghost icon sm" data-a="swap" data-id="${esc(x.id)}" title="Skift kunde ud" aria-label="Skift ${esc(x.kunde)} ud">⇄</button><button class="btn ghost icon sm danger" data-a="rm" data-id="${esc(x.id)}" title="Fjern kunde" aria-label="Fjern ${esc(x.kunde)}">✕</button></span>`:""}</div></td>${ws.map(w=>{const on=set.has(w);const st=on&&(w===a||!set.has(w-1)),en=on&&(w===z||!set.has(w+1));let rl=0;if(st){while(set.has(w+rl)&&w+rl<=z)rl++;}return `<td class="c${on?" on":""}${st?" s":""}${en?" e":""}${set.has(w)&&(cfw.get(w)||[]).some(c=>c[0]===x.kunde||c[1]===x.kunde)?" cf":""}${y===TODAY[0]&&w===TODAY[1]?" cur":""}" style="--kc:${kc}${st?`;--rl:${rl}`:""}"${st&&rl>=2?` data-lbl="${esc(x.kunde+" · "+x.sek+"s")}"`:""} data-id="${esc(x.id)}" data-b="${b.id}" data-w="${w}"></td>`;}).join("")}</tr>`;}).join("")
       +`<tr class="drop"><td class="lc">Træk en kunde hertil</td>${ws.map(w=>`<td class="c${y===TODAY[0]&&w===TODAY[1]?" cur":""}" data-b="${b.id}" data-w="${w}"></td>`).join("")}</tr>`;
     const lenRow=`<tr class="len"><td class="lc">Længde${b.bumper?` inkl. ${b.bumper}s ind/ud`:""}</td>${lens.map((L,i)=>`<td class="${t!=="Sponsorbreak"&&avg&&L>avg*1.15?"hi":""}${cfw.has(ws[i])?" cf":""}${y===TODAY[0]&&ws[i]===TODAY[1]?" cur":""}" data-lb="${b.id}" data-lw="${ws[i]}" title="Uge ${ws[i]}: ${fmtDur(L)}${M?" af maks "+fmtDur(M)+" ("+Math.round(L/M*100)+" %)":""}${cfw.has(ws[i])?" · Brancheregel brudt: "+esc(cfw.get(ws[i]).map(c=>c[0]+" + "+c[1]).join(", ")):""}">${M?`<div class="gz"><i class="${pctCls(L/M)}" style="height:${Math.min(L/M,1.25)/1.25*100}%"></i><b></b></div>`:""}<span class="lv">${L?fmtDur(L):"–"}</span>${deltaHtml(L-baseLen(y,ws[i],b.id))}</td>`).join("")}</tr>`;
-    return `<section class="card pblk"><header><div class="row" style="gap:10px"><button class="btn ghost icon sm" data-a="pcol" data-b="${b.id}" aria-expanded="${!col}" aria-label="Fold ${esc(b.navn)}">${col?"▸":"▾"}</button><h3>${esc(b.navn)}</h3><span class="note">${b.perDag} gange dagligt · ${vis.length} kunder i perioden${hidden?` · ${hidden} uden for perioden`:""}</span>${cfw.size?`<span class="conf small">Brancheregel brudt i uge ${esc(ranges([...cfw.keys()]))}</span>`:""}</div>
+    return `<section class="card pblk"><header><div class="row" style="gap:10px"><button class="btn ghost icon sm" data-a="pcol" data-b="${b.id}" aria-expanded="${!col}" aria-label="Fold ${esc(b.navn)}">${col?"▸":"▾"}</button><h3>${esc(b.navn)}</h3>${ekstraTag(b)}${b.ekstra&&S.isOwner!==false?`<button class="btn ghost icon sm danger rmx" data-a="rm-brk" data-id="${b.id}" title="Slet ${esc(b.navn)}" aria-label="Slet ${esc(b.navn)}">🗑</button>`:""}<span class="note">${b.perDag} gange dagligt · ${vis.length} kunder i perioden${hidden?` · ${hidden} uden for perioden`:""}</span>${cfw.size?`<span class="conf small">Brancheregel brudt i uge ${esc(ranges([...cfw.keys()]))}</span>`:""}</div>
       <div class="hgz"><span class="note">Uge ${S.week}</span><b class="num">${fmtDur(Lw)}</b>${deltaHtml(Lw-baseLen(y,S.week,b.id),"dlt")}${M?`<div class="blb" title="${fmtDur(Lw)} af maks ${fmtDur(M)}"><i class="${pctCls(Lw/M)}" style="width:${Math.min(Lw/M,1.25)/1.25*100}%"></i><b style="left:${100/1.25}%"></b></div><span class="note num">${Math.round(Lw/M*100)} % af ${fmtDur(M)}</span>`:""}</div></header>
       <div class="pg"><table style="width:max(100%, ${240+ws.length*32}px)"><thead>${head}</thead><tbody>${body}${lenRow}</tbody></table></div></section>`;}).join("");
   const libHtml=lib.map(x=>`<div class="dchip" draggable="${S.canWrite!==false}" data-k="${esc(x.kunde)}" data-s="${x.sek}" style="border-left-color:var(${KVAR[kanalFor(S.year,x.kanal)]||"--k-eg"})" title="${esc(kanalFor(S.year,x.kanal)+(x.spot?" · "+x.spot:""))}"><b>${esc(x.kunde)}</b><span>${kat(x.kunde)?`<span class="ktag">${esc(kat(x.kunde))}</span> `:""}${x.sek}s</span></div>`).join("")||`<p class="muted small">Ingen kunder matcher</p>`;
@@ -192,7 +196,7 @@ function vPlan(){
   <div class="tabs" role="tablist">${tabs}</div>
   ${(()=>{let n=0,tot=0;for(const [k,v] of S.base){const [yy,id,w]=k.split("|");if(+yy!==y)continue;const d=breakLen(y,+w,id)-v;if(d){n++;tot+=d;}}return n?`<div class="banner small row between" style="background:var(--surface);border-color:var(--line)"><span>Ændringer siden du åbnede siden: <b>${n}</b> break-uger ændret, i alt <b>${tot>0?"+":"−"}${Math.abs(tot)} sek</b>. Tallene under hvert break viser ændringen pr. uge.</span><button class="btn sm" data-a="base-reset">Nulstil ændringer</button></div>`:"";})()}
   <div class="plan">
-    ${libPanel("Træk en kunde ind i en uge i et break. Klik eller træk hen over ugerne for at forlænge. Skift+klik udfylder et interval.")}
+    ${libPanel("Træk en kunde ind i en uge. Klik eller træk hen over ugerne for at forlænge.")}
     <div style="display:flex;flex-direction:column;gap:14px;min-width:0">
       <div class="legend">${KANALER.map(k=>`<span><span class="sw" style="background:var(${KVAR[k]})"></span>${k}</span>`).join("")}<span><span class="sw" style="background:var(--accent-soft);outline:1px solid var(--accent)"></span>Valgt uge ${S.week}</span><span class="lgz"><i class="ok"></i><i class="warn"></i><i class="bad"></i>Længde mod maks</span><span style="color:var(--accent);font-weight:600">Orange tal = over 15 % over snittet</span></div>
       ${blocks}
@@ -225,13 +229,13 @@ function libPanel(hint){
 function vUgeplan(){
   const y=S.year,w=S.week,[py,pw]=shiftWeek(y,w,-1),[ny,nw]=shiftWeek(y,w,1);
   const sec=TYPES.map(t=>{
-    const bs=S.cfg.breaks.filter(b=>b.type===t);
+    const bs=S.cfg.breaks.filter(b=>b.type===t&&(!b.ekstra||activeIn(y,w,b.id).length||!hasBookings(b.id)));
     const avg=groupAvg(y,w,t);const b0=bs[0]||{};
     const tot=bs.reduce((s2,b)=>s2+breakLen(y,w,b.id),0),totP=bs.reduce((s2,b)=>s2+breakLen(py,pw,b.id),0),totB=bs.reduce((s2,b)=>s2+baseLen(y,w,b.id),0);
     const totH=`<span class="note">I alt <b class="num" style="color:var(--ink)">${fmtDur(tot)}</b>${deltaHtml(tot-totB,"dlt")} · ${tot-totP>=0?"+":"−"}${Math.abs(tot-totP)}s mod uge ${pw}</span>`;
     const head=t==="Sponsorbreak"?`<span class="note">${b0.perDag||0} afmeldinger pr. dag (intro/outro)</span>`:
       `<div class="mtsum"><div><span>Gennemsnit alle breaks i sek.</span><b class="num">${Math.round(avg)}</b></div><div><span>Gennemsnit alle breaks i min.</span><b class="num">${fmtDur(Math.round(avg))}</b></div><div class="pl"><span>Placeholder tid i MediaTool</span><b class="num">${fmtDur(Math.round(avg)+(b0.buffer||0))}</b><small>snit + ${b0.buffer||0} sek</small></div></div>`;
-    return `<section style="display:flex;flex-direction:column;gap:10px"><div class="row between"><div class="row" style="gap:14px"><h3>${t}s</h3>${totH}</div>${head}</div>
+    return `<section class="ugsec" style="display:flex;flex-direction:column;gap:10px"><div class="row between"><div class="row" style="gap:14px"><h3>${t}s</h3>${totH}${S.isOwner!==false?`<button class="btn sm addx" data-a="add-brk" data-t="${t}" title="Opret et ekstraordinært ${t.toLowerCase()}">+ Ekstra ${t.toLowerCase()}</button>`:""}</div>${head}</div>
       <div class="hrow">${bs.map(b=>breakCard(b,y,w,py,pw,ny,nw)).join("")}</div></section>`;}).join("");
   const gk=S.godk[y+"-"+w];let changedAfter=[];
   if(gk&&Array.isArray(gk.sig)){const cur=new Set(weekSig(y,w)),old=new Set(gk.sig);const add=[...cur].filter(x=>!old.has(x)),rem=[...old].filter(x=>!cur.has(x));
@@ -243,7 +247,7 @@ function vUgeplan(){
     ${(()=>{let seen=false;try{seen=localStorage.getItem("sl-tip-ug")==="1";}catch(e){}return seen||S.canWrite===false?"":`<div class="tip1" role="note"><span><b>Tip:</b> Træk kunder fra listen ind i et break. Brug <b>⇄</b> til at skifte en kunde ud og <b>✕</b> til at fjerne den. Alt kan fortrydes med <b>↶ Fortryd</b> øverst eller Ctrl+Z.</span><button class="btn sm" data-a="tip-ok">Forstået</button></div>`;})()}
     ${gkBox}
     <p class="note" style="margin:-8px 0 0">${esc(weekLabel(y,w))}. <span class="tag-new">Ny</span> = ikke med i uge ${pw}. <span class="tag-end">Sidste uge</span> = ikke med i uge ${nw}.</p>
-    <div class="plan">${libPanel("Træk en kunde ind i et break, eller oven på en kunde for at skifte den ud. Træk spots mellem breaks for at flytte dem, op og ned for rækkefølgen, eller ned i skraldespanden for at fjerne dem. Ctrl+Z fortryder.")}
+    <div class="plan">${libPanel("Træk en kunde ind i et break. Slip oven på en kunde for at bytte. Ctrl+Z fortryder.")}
     <div style="display:flex;flex-direction:column;gap:20px;min-width:0">${sec}</div></div>
     <div id="trash" class="trash" hidden aria-hidden="true">Slip her for at fjerne fra breaket</div>`;
 }
@@ -260,8 +264,8 @@ function breakCard(b,y,w,py,pw,ny,nw){
       <span class="sk">${x.sek}s</span></li>`;}).join("");
   const dPrev=L-breakLen(py,pw,b.id),dBase=L-baseLen(y,w,b.id);
   const bump=items.length&&b.bumper?`<li class="bump"><span class="p">·</span><span class="nm">Breaker ind/ud</span><span></span><span class="sk">${b.bumper}s</span></li>`:"";
-  return `<article class="card brk" data-dropb="${b.id}"><header><div><h3 style="font-size:16px">${esc(b.navn)}</h3><div class="note">${b.perDag} gange dagligt · ${items.length} spots</div></div><div style="text-align:right"><div class="len${maksOf(b)&&L>maksOf(b)?" over":""}" ${maksOf(b)&&L>maksOf(b)?`title="Over maks længde ${fmtDur(maksOf(b))}"`:""}>${fmtDur(L)}${deltaHtml(dBase,"dlt")}</div>${maksOf(b)&&L>maksOf(b)?`<div class="overtag">${fmtDur(L-maksOf(b))} over maks ${fmtDur(maksOf(b))}</div>`:""}<div class="note num">${dPrev?(dPrev>0?"+":"−")+Math.abs(dPrev)+"s":"±0s"} mod uge ${pw}</div></div></header>
-    ${cfs.length?`<div class="cfl">Brancheregel brudt: ${cfs.map(c=>esc(c[0]+" + "+c[1])).join(", ")}</div>`:""}<ol>${lis||`<li class="emptyli"><span></span><span class="muted small">Træk en kunde hertil</span><span></span><span></span></li>`}${bump}</ol>
+  return `<article class="card brk${b.ekstra?" xbrk":""}" data-dropb="${b.id}"><header><div><h3 style="font-size:16px" title="${esc(b.navn)}">${esc(b.navn)}</h3><div class="note">${b.perDag}× dagligt · ${items.length} spots</div><div class="note num">${dPrev?(dPrev>0?"+":"−")+Math.abs(dPrev)+"s":"±0s"} mod uge ${pw}</div>${b.ekstra?`<div class="note xrow"><span class="xtag" style="margin:0">Ekstra</span>${S.isOwner!==false?`<a href="#" class="dellink" data-a="rm-brk" data-id="${b.id}" title="Slet ${esc(b.navn)}">Slet break</a>`:""}</div>`:""}</div><div style="text-align:right"><div class="len${maksOf(b)&&L>maksOf(b)?" over":""}" ${maksOf(b)&&L>maksOf(b)?`title="Over maks længde ${fmtDur(maksOf(b))}"`:""}>${fmtDur(L)}${deltaHtml(dBase,"dlt")}</div>${maksOf(b)&&L>maksOf(b)?`<div class="overtag">${fmtDur(L-maksOf(b))} over maks ${fmtDur(maksOf(b))}</div>`:""}</div></header>
+    ${cfs.length?`<div class="cfl">Brancheregel brudt: ${cfs.map(c=>esc(c[0]+" + "+c[1])).join(", ")}</div>`:""}<ol>${lis||`<li class="emptyli"><span class="dropz">+ Træk en kunde hertil</span></li>`}${bump}</ol>
     <div class="tots">${b.type==="Sponsorbreak"?`<span>Total antal sekunder</span><b class="num">${L}</b>`:`<span>Total antal sek.</span><b class="num">${L}</b><span>Total antal min.</span><b class="num">${fmtDur(L)}</b>`}</div>
     ${gone.length?`<footer><span>Udgår fra uge ${pw}: ${esc(gone.join(", "))}</span></footer>`:""}</article>`;
 }
@@ -408,7 +412,7 @@ document.addEventListener("mousemove",e=>{const t=e.target.closest&&e.target.clo
 // --- Overordnet overblik (én skærm)
 const maksOf = b => +b.maks || ({Reklamebreak:330,Powerbreak:120,Sponsorbreak:25}[b.type]||0);
 function capWeek(y,w){let used=0,cap=0,free=0;const per={};for(const t of TYPES){per[t]={used:0,cap:0};}
-  for(const b of S.cfg.breaks){const L=breakLen(y,w,b.id),M=maksOf(b);used+=L*(b.perDag||0);cap+=M*(b.perDag||0);free+=Math.max(0,M-L)*(b.perDag||0);per[b.type].used+=L;per[b.type].cap+=M;}
+  for(const b of S.cfg.breaks){const L=breakLen(y,w,b.id),M=maksOf(b);if(b.ekstra&&!L)continue;used+=L*(b.perDag||0);cap+=M*(b.perDag||0);free+=Math.max(0,M-L)*(b.perDag||0);per[b.type].used+=L;per[b.type].cap+=M;}
   return {used,cap,free,pct:cap?used/cap:0,per};}
 function pctCls(p){return p>1?"bad":p>=.85?"warn":"ok";}
 // --- Overblik pr. periode: dag, uge, måned, kvartal, år
@@ -447,10 +451,10 @@ function vOverview(y,w){
     [perDay?"Sendetid pr. dag":"Sendetid",perDay?fmtDur(c.sek):fmtHours(c.sek),dd(c.sek,p.sek,v=>perDay?fmtDur(v):fmtHours(v))],
     ["Reklametid pr. dag",fmtDur(c.perDag),dd(c.perDag,p.perDag,fmtDur)],
     ["Belægning",Math.round(c.pct*100)+" %",dd(Math.round(c.pct*100),Math.round(p.pct*100),null," pp")],
-    [perDay?"Ledig reklametid pr. dag":"Ledig reklametid i perioden",perDay?fmtDur(c.freeDag):fmtHours(c.freeTot),`<span class="muted">${fmtDur(c.freeDag)} pr. dag i snit</span>`]];
+    [perDay?"Ledig tid pr. dag":"Ledig reklametid",perDay?fmtDur(c.freeDag):fmtHours(c.freeTot),`<span class="muted">${fmtDur(c.freeDag)} pr. dag i snit</span>`]];
   // graf
   let chart="";
-  if(kind==="dag"||kind==="uge"){const bs=S.cfg.breaks;const SC=1.2;
+  if(kind==="dag"||kind==="uge"){const bs=S.cfg.breaks.filter(b=>!b.ekstra||breakLen(y,w,b.id));const SC=1.2;
     chart=`<div class="ovl">Breaklængde mod maks, uge ${w}</div><div class="bl">${bs.map(b=>{const L=breakLen(y,w,b.id),M=maksOf(b);return `<div class="blr" data-tip="${esc(`${b.navn}: ${fmtDur(L)} af maks ${fmtDur(M)} · ${b.perDag} gange dagligt`)}"><span>${esc(b.navn)}</span><div class="blb"><i class="${pctCls(M?L/M:0)}" style="width:${M?Math.min(L/M,SC)/SC*100:0}%"></i><b style="left:${100/SC}%"></b></div><span class="num">${fmtDur(L)} <span class="muted">${M?Math.round(L/M*100)+"%":""}</span></span></div>`;}).join("")}</div><div class="note">Hver bjælke viser breakets længde i forhold til dets egen maks længde. Stregen er 100 %.</div>`;}
   else{const groups=(kind==="aar"||kind==="atd")?MDRL.map((n,i)=>({l:n.slice(0,3),ws:P.weeks.filter(([a,b])=>weekMonth(a,b)===i)})).filter(g=>g.ws.length):P.weeks.map(x=>({l:String(x[1]),ws:[x]}));
     const vals=groups.map(g=>{const st=periodStats(g.ws,false);return {l:g.l,v:st.sek/3600,pct:st.pct,ws:g.ws};});const mx=Math.max(0.01,...vals.map(v=>v.v));
@@ -701,9 +705,10 @@ function vIndst(){
   return `<h2>Indstillinger</h2>${own?"":`<div class="banner small">Kun ejeren kan ændre breaks, brancher og regler. Du kan se dem her.</div>`}
   <div class="card pad"><div class="row between"><h3>Breaks</h3>${own?`<button class="btn pri" data-a="save-cfg">Gem breaks</button>`:""}</div>
     <p class="note">"Gange dagligt" bruges til at beregne visninger i rapporterne. Ind/ud lægges til breakets længde. Buffer lægges til snittet og giver placeholder-tiden i MediaTool. Maks længde bruges til at beregne belægning og ledig reklametid. "Med i snit" styrer hvilke breaks der indgår i gennemsnittet.</p>
-    <div class="tw"><table><thead><tr><th>Break</th><th>Type</th><th class="n">Gange dagligt</th><th class="n">Ind/ud (sek)</th><th class="n">Buffer (sek)</th><th class="n">Maks længde (sek)</th><th>Med i snit</th></tr></thead><tbody>
-    ${bs.map((b,i)=>`<tr><td><input type="text" value="${esc(b.navn)}" data-c="${i}" data-k="navn" ${ro} style="width:160px"></td><td>${esc(b.type)}</td><td class="n"><input type="number" min="0" value="${b.perDag}" data-c="${i}" data-k="perDag" ${ro} style="width:70px"></td><td class="n"><input type="number" min="0" value="${b.bumper}" data-c="${i}" data-k="bumper" ${ro} style="width:70px"></td><td class="n"><input type="number" min="0" value="${b.buffer}" data-c="${i}" data-k="buffer" ${ro} style="width:70px"></td><td class="n"><input type="number" min="0" value="${maksOf(b)}" data-c="${i}" data-k="maks" ${ro} style="width:80px"></td><td><input type="checkbox" ${b.snit?"checked":""} data-c="${i}" data-k="snit" ${ro} aria-label="Med i snit"></td></tr>`).join("")}
+    <div class="tw"><table><thead><tr><th>Break</th><th class="n">Gange dagligt</th><th class="n">Ind/ud (sek)</th><th class="n">Buffer (sek)</th><th class="n">Maks længde (sek)</th><th>Med i snit</th><th></th></tr></thead><tbody>
+    ${bs.map((b,i)=>`${i===0||bs[i-1].type!==b.type?`<tr class="cfgsub"><td colspan="7">${b.type}s</td></tr>`:""}<tr><td><input type="text" value="${esc(b.navn)}" data-c="${i}" data-k="navn" ${ro} style="width:200px"></td><td class="n"><input type="number" min="0" value="${b.perDag}" data-c="${i}" data-k="perDag" ${ro} style="width:70px"></td><td class="n"><input type="number" min="0" value="${b.bumper}" data-c="${i}" data-k="bumper" ${ro} style="width:70px"></td><td class="n"><input type="number" min="0" value="${b.buffer}" data-c="${i}" data-k="buffer" ${ro} style="width:70px"></td><td class="n"><input type="number" min="0" value="${maksOf(b)}" data-c="${i}" data-k="maks" ${ro} style="width:80px"></td><td><input type="checkbox" ${b.snit?"checked":""} data-c="${i}" data-k="snit" ${ro} aria-label="Med i snit"></td><td>${b.ekstra?'<span class="xtag">Ekstra</span> ':""}${own&&(b.ekstra||!hasBookings(b.id))?`<button class="btn ghost icon sm danger rmx" data-a="rm-brk" data-id="${b.id}" title="Fjern ${esc(b.navn)}" aria-label="Fjern ${esc(b.navn)}">✕</button>`:""}</td></tr>`).join("")}
     </tbody></table></div>
+    ${own?`<div class="row" style="margin-top:10px;gap:8px"><span class="small muted">Ekstraordinært break:</span>${TYPES.map(t=>`<button class="btn sm" data-a="add-brk" data-t="${t}">+ ${t}</button>`).join("")}</div><p class="note">Et ekstra break indgår i planlægning, ugeplan og alle rapporter som de andre. Det tæller kun med i belægning i de uger, hvor det har spots, og er som udgangspunkt ikke med i snittet. Et ekstra break kan slettes med det samme, også med bookinger, som så slettes med det. Et fast break kan kun fjernes, når det ikke har bookinger.</p>`:""}
     <div class="fld" style="margin-top:14px;max-width:760px"><label for="liveurl">Live-signal (stream-adresse .m3u8 eller indlejrings-link)</label><input id="liveurl" type="text" placeholder="https://… fra jeres streamingleverandør" value="${esc(S.cfg.liveUrl||"")}" ${ro}><span class="note">Bruges af Live-knappen øverst. Indsæt kun en adresse, som leverandøren har givet til visning på jeres egen side. Brug aldrig et login med kode.</span></div>
     <div class="row" style="margin-top:10px"><label for="dpu" class="small">Sendedage pr. uge</label><input id="dpu" type="number" min="1" max="7" value="${S.cfg.dagePrUge||7}" ${ro} style="width:70px"></div>
   </div>
@@ -944,6 +949,18 @@ document.addEventListener("click",async e=>{
       copyText(L.join("\n"));break;}
     case "save-cfg":{const bs=S.cfg.breaks.map(b=>({...b}));document.querySelectorAll("[data-c]").forEach(el=>{const b=bs[+el.dataset.c];const k=el.dataset.k;b[k]=k==="snit"?el.checked:k==="navn"?el.value.trim()||b.navn:Math.max(0,+el.value||0);});
       const dpu=Math.min(7,Math.max(1,+$("#dpu").value||7));const lu=($("#liveurl")?.value||"").trim();if(lu&&!/^https:\/\//.test(lu)){toast("Live-adressen skal starte med https://");break;}try{await S.db.doc("config/main").set({breaks:bs,dagePrUge:dpu,liveUrl:lu,updatedAt:new Date().toISOString()});toast("Breaks gemt");}catch(err){failWrite(err);}break;}
+    case "add-brk":{if(S.isOwner===false){toast("Kun ejeren kan oprette breaks");break;}const tp=t.dataset.t;const same=S.cfg.breaks.filter(b=>b.type===tp);const src=same[0]||{perDag:4,bumper:0,buffer:0,maks:0};
+      let n=1;const ids=new Set(S.cfg.breaks.map(b=>b.id));while(ids.has(TPRE[tp]+n))n++;
+      const nb={id:TPRE[tp]+n,navn:`${tp} ${n}`,type:tp,perDag:src.perDag||0,bumper:src.bumper||0,buffer:src.buffer||0,maks:maksOf(src)||0,snit:false,ekstra:true};
+      const bs=[...S.cfg.breaks.filter(b=>TYPES.indexOf(b.type)<TYPES.indexOf(tp)||b.type===tp),nb,...S.cfg.breaks.filter(b=>TYPES.indexOf(b.type)>TYPES.indexOf(tp))];
+      try{await S.db.doc("config/main").set({...S.cfg,breaks:bs,updatedAt:new Date().toISOString()});toast(`${nb.navn} er oprettet. Træk kunder ind i det. Navn og gange dagligt rettes under Indstillinger.`);if(S.view==="planlaegning"){S.pt=tp;render();}}catch(err){failWrite(err);}break;}
+    case "rm-brk":{const b=S.cfg.breaks.find(x=>x.id===t.dataset.id);if(!b)break;if(S.isOwner===false){toast("Kun ejeren kan slette breaks");break;}
+      const bk=all().filter(x=>x.breakId===b.id);
+      if(bk.length&&!b.ekstra){toast("Breaket har bookinger. Flyt eller slet dem først.");break;}
+      const kunder=[...new Set(bk.map(x=>x.kunde))];
+      if(!confirm(bk.length?`Slet ${b.navn}?\n\nDe ${bk.length} booking${bk.length===1?"":"er"} i breaket bliver også slettet (${kunder.join(", ")}). Det kan ikke fortrydes.`:`Slet ${b.navn}?`))break;
+      try{for(const x of bk)await S.db.collection("bookings").doc(x.id).delete();
+        await S.db.doc("config/main").set({...S.cfg,breaks:S.cfg.breaks.filter(x=>x.id!==b.id),updatedAt:new Date().toISOString()});toast(`${b.navn} er slettet`);}catch(err){failWrite(err);}break;}
     case "carry-all":document.querySelectorAll(".carry:not(:disabled)").forEach(c=>c.checked=true);break;
     case "carry":{const ids=[...document.querySelectorAll(".carry:checked")].map(c=>c.value);if(!ids.length){toast("Vælg bookinger");break;}
       const ny=S.year+1,nW=weeksIn(ny);const fra=Math.max(1,+$("#cfra").value||1),til=Math.min(nW,Math.max(fra,+$("#ctil").value||nW));const ug=[];for(let w=fra;w<=til;w++)ug.push(w);

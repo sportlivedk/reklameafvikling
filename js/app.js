@@ -1,5 +1,7 @@
 // SPORT LIVE Reklameafvikling – selve systemet (overblik, planlægning, ugeplan, rapporter, regler)
 (() => {
+// Tema: mørk som standard, lys kan vælges. Huskes pr. browser.
+try{const th=localStorage.getItem("sl-theme");if(th==="light")document.documentElement.dataset.theme="light";}catch(e){}
 "use strict";
 // ---------- Konstanter ----------
 const DEFAULT_BREAKS = [
@@ -36,7 +38,7 @@ const MDR = ["jan","feb","mar","apr","maj","jun","jul","aug","sep","okt","nov","
 const S = {
   bookings: new Map(), cfg: {breaks: DEFAULT_BREAKS, dagePrUge: 7}, cfgVer: false,
   loaded: false, slow: false, err: null, canWrite: true, db: null, user: null, dl: null, meId: null,
-  year: 0, week: 0, view: "overblik",
+  year: 0, week: 0, view: "ugeplan",
   bf: {q:"", type:"", kanal:"", status:"", aktiv:false},
   rf: null, modal: null, base:new Map(), baseReady:false, act:null, undo:[], tx:null, godk:{}, ugeAuto:false, histOpen:false, isOwner:null, rmode:"kunde", pv:{r:"kunde",c:"maaned",m:"sek"}, q:null, drag:null, kat:{kunder:{},kategorier:["Bank","Betting"],regler:[{a:"Bank",b:"Betting"}],eksklusiv:[]}, katDraft:null, pt:"Reklamebreak", pwin:"13", pq:"", lib:[], paint:null, dirty:false, collapsed:new Set(),
 };
@@ -50,6 +52,10 @@ function weekLabel(y,w){const m=weekMon(y,w);const s=new Date(m);s.setUTCDate(m.
 function dStr(d){return d.getUTCDate()+". "+MDR[d.getUTCMonth()]+" "+d.getUTCFullYear();}
 function shiftWeek(y,w,d){w+=d;while(w<1){y--;w+=weeksIn(y);}while(w>weeksIn(y)){w-=weeksIn(y);y++;}return [y,w];}
 const TODAY = isoWeek(new Date());
+// Planlægning åbner på 2027 (systemet starter der). Ugeplan beholder sin egen uge.
+const PLAN_START = Math.max(2027, TODAY[0]);
+const planYears = () => {const ys=new Set([PLAN_START-1,PLAN_START,TODAY[0]+1]);all().forEach(b=>ys.add(+b.year));return [...ys].filter(x=>x>=2026).sort();};
+
 
 // ---------- Hjælpere ----------
 const $ = (s,r=document)=>r.querySelector(s);
@@ -98,16 +104,17 @@ function groupAvg(y,w,type){const bs=S.cfg.breaks.filter(b=>b.type===type&&b.sni
 // ---------- Rendering ----------
 function render(){
   {const w=document.getElementById("who");if(w&&window.__gas&&__gas.st.me.email){w.textContent=__gas.st.me.email+" · "+__gas.st.me.role;document.getElementById("logout").hidden=false;}}
+  {const tb=document.getElementById("thbtn");if(tb)tb.textContent=document.documentElement.dataset.theme==="light"?"☾":"☀︎";}
   try{drawHist();}catch(e){}
   if(S.paint){S.dirty=true;return;}
-  document.querySelectorAll("#nav a").forEach(a=>{if(a.getAttribute("href")==="#"+S.view)a.setAttribute("aria-current","page");else a.removeAttribute("aria-current");});
+  document.querySelectorAll("#nav a,#gearbtn").forEach(a=>{if(a.getAttribute("href")==="#"+S.view)a.setAttribute("aria-current","page");else a.removeAttribute("aria-current");});
   $("#wklbl").innerHTML=`Uge ${S.week} <span>· ${esc(weekLabel(S.year,S.week))}</span>`;
   {const hideW=(S.view==="rapporter"||S.view==="indstillinger");document.querySelectorAll("#wk [data-a=wk-prev],#wk [data-a=wk-next],#wk [data-a=wk-now],#wklbl").forEach(e=>e.style.display=hideW?"none":"");}
   const m=$("#main");
   if(S.err){m.innerHTML=`<div class="card pad"><h2>Data kan ikke hentes</h2><p class="muted">${esc(S.err)}</p></div>`;return;}
   if(!S.loaded){m.innerHTML=`<div class="empty">${S.slow?"Forbindelsen til databasen er langsom. Data vises, så snart den svarer.":"Henter afviklingsdata…"}</div>`;return;}
   const v={planlaegning:vPlan,dashboard:vDash,overblik:vDash,ugeplan:vUgeplan,bookinger:vBookinger,rapporter:vRapporter,indstillinger:vIndst}[S.view]||vOverblik;
-  const weekViews=["dashboard","planlaegning","ugeplan"];const notNow=weekViews.includes(S.view)&&(S.year!==TODAY[0]||S.week!==TODAY[1]);
+  const weekViews=["dashboard","ugeplan"];const notNow=weekViews.includes(S.view)&&(S.year!==TODAY[0]||S.week!==TODAY[1]);
   const wkBanner=notNow?`<div class="wkban" role="status"><span>Du ser <b>uge ${S.week}, ${S.year}</b> (${esc(weekLabel(S.year,S.week))}). Denne uge er uge ${TODAY[1]}.</span><button class="btn sm" data-a="wk-now">Gå til denne uge</button></div>`:"";
   document.getElementById("wk").classList.toggle("notnow",notNow);
   m.innerHTML=wkBanner+(S.slow?`<div class="banner small">Forbindelsen er ustabil. Det viste kan være forældet.</div>`:"")+(!S.canWrite?`<div class="banner small">Du har kun læseadgang. Bed ejeren om rollen redaktør.</div>`:"")+v();
@@ -193,13 +200,13 @@ function vPlan(){
       <div class="hgz"><span class="note">Uge ${S.week}</span><b class="num">${fmtDur(Lw)}</b>${deltaHtml(Lw-baseLen(y,S.week,b.id),"dlt")}${M?`<div class="blb" title="${fmtDur(Lw)} af maks ${fmtDur(M)}"><i class="${pctCls(Lw/M)}" style="width:${Math.min(Lw/M,1.25)/1.25*100}%"></i><b style="left:${100/1.25}%"></b></div><span class="note num">${Math.round(Lw/M*100)} % af ${fmtDur(M)}</span>`:""}</div></header>
       <div class="pg"><table style="width:max(100%, ${240+ws.length*32}px)"><thead>${head}</thead><tbody>${body}${lenRow}</tbody></table></div></section>`;}).join("");
   const libHtml=lib.map(x=>`<div class="dchip" draggable="${S.canWrite!==false}" data-k="${esc(x.kunde)}" data-s="${x.sek}" style="border-left-color:var(${KVAR[kanalFor(S.year,x.kanal)]||"--k-eg"})" title="${esc(kanalFor(S.year,x.kanal)+(x.spot?" · "+x.spot:""))}"><b>${esc(x.kunde)}</b><span>${kat(x.kunde)?`<span class="ktag">${esc(kat(x.kunde))}</span> `:""}${x.sek}s</span></div>`).join("")||`<p class="muted small">Ingen kunder matcher</p>`;
-  return `<div class="row between"><h2>Planlægning ${y}</h2><div class="row"><div class="seg" role="group" aria-label="Periode">${wins.map(([k,l])=>`<button class="${S.pwin===k?"on":""}" data-a="pwin" data-k="${k}">${l}</button>`).join("")}</div>${S.canWrite!==false?`<button class="btn pri" data-a="new">+ Ny booking</button>`:""}</div></div>
+  return `<div class="row between"><div class="row" style="gap:14px"><h2>Planlægning ${y}</h2><div class="seg" role="group" aria-label="Vælg år">${planYears().map(x=>`<button class="${x===y?"on":""}" data-a="pyear" data-y="${x}">${x}</button>`).join("")}</div></div><div class="row"><div class="seg" role="group" aria-label="Periode">${wins.map(([k,l])=>`<button class="${S.pwin===k?"on":""}" data-a="pwin" data-k="${k}">${l}</button>`).join("")}</div>${S.canWrite!==false?`<button class="btn pri" data-a="new">+ Ny booking</button>`:""}</div></div>
   <div class="tabs" role="tablist">${tabs}</div>
   ${(()=>{let n=0,tot=0;for(const [k,v] of S.base){const [yy,id,w]=k.split("|");if(+yy!==y)continue;const d=breakLen(y,+w,id)-v;if(d){n++;tot+=d;}}return n?`<div class="banner small row between" style="background:var(--surface);border-color:var(--line)"><span>Ændringer siden du åbnede siden: <b>${n}</b> break-uger ændret, i alt <b>${tot>0?"+":"−"}${Math.abs(tot)} sek</b>. Tallene under hvert break viser ændringen pr. uge.</span><button class="btn sm" data-a="base-reset">Nulstil ændringer</button></div>`:"";})()}
   <div class="plan">
     ${libPanel("Træk en kunde ind i en uge. Klik eller træk hen over ugerne for at forlænge.")}
     <div style="display:flex;flex-direction:column;gap:14px;min-width:0">
-      <div class="legend">${KANALER.map(k=>`<span><span class="sw" style="background:var(${KVAR[k]})"></span>${k}</span>`).join("")}<span><span class="sw" style="background:var(--accent-soft);outline:1px solid var(--accent)"></span>Valgt uge ${S.week}</span><span class="lgz"><i class="ok"></i><i class="warn"></i><i class="bad"></i>Længde mod maks</span><span style="color:var(--accent);font-weight:600">Orange tal = over 15 % over snittet</span></div>
+      <div class="legend">${kanalerFor(y).map(k=>`<span><span class="sw" style="background:var(${KVAR[k]})"></span>${k}</span>`).join("")}<span><span class="sw" style="background:var(--accent-soft);outline:1px solid var(--accent)"></span>Valgt uge ${S.week}</span><span class="lgz"><i class="ok"></i><i class="warn"></i><i class="bad"></i>Længde mod maks</span><span style="color:var(--accent);font-weight:600">Orange tal = over 15 % over snittet</span></div>
       ${blocks}
     </div>
   </div>`;
@@ -380,7 +387,7 @@ function vDash(){
   ${vOverview(y,w)}
   <h3 style="font-size:20px;margin-top:6px">Detaljer</h3>
   <div class="card pad"><div class="row between"><h3>Breaklængde uge ${a}–${z}</h3><span class="note">Mørkere = længere break inden for breaktypen · hvid ramme = valgt uge · rød ramme = brancheregel brudt · klik for at åbne ugen</span></div><div class="tw" style="margin-top:10px">${heat}</div></div>
-  <div class="card pad"><div class="row between"><h3>Solgt reklametid pr. dag, ${y}</h3><div class="legend">${KANALER.map(k=>`<span><span class="sw" style="background:var(${KVAR[k]})"></span>${k}</span>`).join("")}</div></div><div id="yrchart" style="margin-top:8px"></div></div>
+  <div class="card pad"><div class="row between"><h3>Solgt reklametid pr. dag, ${y}</h3><div class="legend">${kanalerFor(y).map(k=>`<span><span class="sw" style="background:var(${KVAR[k]})"></span>${k}</span>`).join("")}</div></div><div id="yrchart" style="margin-top:8px"></div></div>
   <div class="grid2">
     <div class="card pad" id="udl"><div class="row between"><h3>Slutter inden for 4 uger</h3><span class="note">Salgsopfølgning</span></div>${udl.length?`<ul class="list-plain small" style="margin-top:6px">${udl.map(o=>row(o,o=>"sidste uge "+o.last)).join("")}</ul>`:`<p class="muted small">Ingen kampagner slutter de næste 4 uger.</p>`}</div>
     <div class="card pad"><div class="row between"><h3>Starter inden for 4 uger</h3><span class="note">Tjek at film er leveret</span></div>${start.length?`<ul class="list-plain small" style="margin-top:6px">${start.map(o=>row(o,o=>"start uge "+o.first)).join("")}</ul>`:`<p class="muted small">Ingen nye kampagner de næste 4 uger.</p>`}</div>
@@ -703,7 +710,7 @@ function vIndst(){
   const nextY=S.year+1;const lastW=weeksIn(S.year);
   const carry=all().filter(b=>b.year===S.year&&live(b)&&((b.uger||[]).includes(lastW)||(b.uger||[]).includes(52)));
   const already=new Set(all().filter(b=>b.year===nextY).map(b=>b.kunde+"|"+b.breakId));
-  return `<h2>Indstillinger</h2>${own?"":`<div class="banner small">Kun ejeren kan ændre breaks, brancher og regler. Du kan se dem her.</div>`}
+  return `<div class="row between"><h2>Indstillinger</h2><span class="note">Version ${window.SL_VERSION||"Claude-udgave"}</span></div>${own?"":`<div class="banner small">Kun ejeren kan ændre breaks, brancher og regler. Du kan se dem her.</div>`}
   <div class="card pad"><div class="row between"><h3>Breaks</h3>${own?`<button class="btn pri" data-a="save-cfg">Gem breaks</button>`:""}</div>
     <p class="note">"Gange dagligt" bruges til at beregne visninger i rapporterne. Ind/ud lægges til breakets længde. Buffer lægges til snittet og giver placeholder-tiden i MediaTool. Maks længde bruges til at beregne belægning og ledig reklametid. "Med i snit" styrer hvilke breaks der indgår i gennemsnittet.</p>
     <div class="tw"><table><thead><tr><th>Break</th><th class="n">Gange dagligt</th><th class="n">Ind/ud (sek)</th><th class="n">Buffer (sek)</th><th class="n">Maks længde (sek)</th><th>Med i snit</th><th></th></tr></thead><tbody>
@@ -950,6 +957,8 @@ document.addEventListener("click",async e=>{
       copyText(L.join("\n"));break;}
     case "save-cfg":{const bs=S.cfg.breaks.map(b=>({...b}));document.querySelectorAll("[data-c]").forEach(el=>{const b=bs[+el.dataset.c];const k=el.dataset.k;b[k]=k==="snit"?el.checked:k==="navn"?el.value.trim()||b.navn:Math.max(0,+el.value||0);});
       const dpu=Math.min(7,Math.max(1,+$("#dpu").value||7));const lu=($("#liveurl")?.value||"").trim();if(lu&&!/^https:\/\//.test(lu)){toast("Live-adressen skal starte med https://");break;}try{await S.db.doc("config/main").set({breaks:bs,dagePrUge:dpu,liveUrl:lu,updatedAt:new Date().toISOString()});toast("Breaks gemt");}catch(err){failWrite(err);}break;}
+    case "pyear":setPlanYear(+t.dataset.y);S.planYear=S.year;render();break;
+    case "theme":{const light=document.documentElement.dataset.theme!=="light";if(light)document.documentElement.dataset.theme="light";else delete document.documentElement.dataset.theme;try{localStorage.setItem("sl-theme",light?"light":"dark");}catch(e){}const b=$("#thbtn");if(b)b.textContent=light?"☾":"☀︎";render();break;}
     case "add-brk":{if(S.isOwner===false){toast("Kun ejeren kan oprette breaks");break;}const tp=t.dataset.t;const same=S.cfg.breaks.filter(b=>b.type===tp);const src=same[0]||{perDag:4,bumper:0,buffer:0,maks:0};
       let n=1;const ids=new Set(S.cfg.breaks.map(b=>b.id));while(ids.has("X"+TPRE[tp]+n))n++;
       const nb={id:"X"+TPRE[tp]+n,navn:`Ekstra ${tp.toLowerCase()}${n>1?" "+n:""}`,type:tp,perDag:src.perDag||0,bumper:src.bumper||0,buffer:src.buffer||0,maks:maksOf(src)||0,snit:false,ekstra:true};
@@ -959,8 +968,8 @@ document.addEventListener("click",async e=>{
       const bk=all().filter(x=>x.breakId===b.id);
       if(bk.length&&!isX(b)&&!t.dataset.force){toast("Et fast break med bookinger slettes under Indstillinger.");break;}
       if(bk.length&&!confirm(isX(b)?`Slet ${b.navn} med ${bk.length} reklame${bk.length===1?"":"r"}?`:`${b.navn} er et fast break med ${bk.length} reklame${bk.length===1?"":"r"}. Slet breaket og reklamerne?`))break;
-      try{if(window.__gas&&__gas.deleteBreak){await __gas.deleteBreak(b.id);}
-        else{for(const x of bk)await S.db.collection("bookings").doc(x.id).delete();
+      try{let done=false;if(window.__gas&&__gas.deleteBreak){try{await __gas.deleteBreak(b.id);done=true;}catch(e){if(!/Ukendt handling/i.test(e?.message||""))throw e;}}
+        if(!done){for(const x of bk)await S.db.collection("bookings").doc(x.id).delete();
           await S.db.doc("config/main").set({...S.cfg,breaks:S.cfg.breaks.filter(x=>x.id!==b.id),updatedAt:new Date().toISOString()});}
         toast(`${b.navn} er slettet`);}catch(err){failWrite(err);}break;}
     case "carry-all":document.querySelectorAll(".carry:not(:disabled)").forEach(c=>c.checked=true);break;
@@ -991,8 +1000,13 @@ document.addEventListener("keydown",e=>{if(S.q){if(e.key==="Escape"){S.q=null;dr
   if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==="z"&&!e.shiftKey&&!/INPUT|TEXTAREA|SELECT/.test(document.activeElement?.tagName||"")&&!S.modal&&!S.act){e.preventDefault();undo();return;}
   if(e.key==="Escape"&&S.act){S.act=null;drawAct();return;}if(e.key==="Escape"&&S.modal){S.modal=null;drawModal();}});
 let rT;window.addEventListener("resize",()=>{clearTimeout(rT);rT=setTimeout(()=>{if(S.view==="rapporter")afterReport();if(S.view==="dashboard")drawYear();},150);});
-function route(){let h0=location.hash.replace("#","");if(h0==="ugeplan"&&!S.ugeAuto){S.ugeAuto=true;const dow=(new Date().getDay()+6)%7;if(dow>=3&&S.year===TODAY[0]&&S.week===TODAY[1]){[S.year,S.week]=shiftWeek(TODAY[0],TODAY[1],1);setTimeout(()=>toast(`Ugeplanen viser næste uge (uge ${S.week}), fordi det er den, der skal gøres klar`),300);}}
-  let h=location.hash.replace("#","");if(h==="bookinger")h="planlaegning";if(h==="overblik")h="dashboard";if(h==="udl")h="dashboard";S.view=["planlaegning","dashboard","ugeplan","rapporter","indstillinger"].includes(h)?h:"dashboard";render();window.scrollTo(0,0);}
+function setPlanYear(y){S.year=y;S.week=y===TODAY[0]?TODAY[1]:1;}
+function route(){let h0=location.hash.replace("#","")||"ugeplan";if(h0==="ugeplan"&&!S.ugeAuto){S.ugeAuto=true;const dow=(new Date().getDay()+6)%7;if(dow>=3&&S.year===TODAY[0]&&S.week===TODAY[1]){[S.year,S.week]=shiftWeek(TODAY[0],TODAY[1],1);setTimeout(()=>toast(`Ugeplanen viser næste uge (uge ${S.week}), fordi det er den, der skal gøres klar`),300);}}
+  let h=location.hash.replace("#","");if(h==="bookinger")h="planlaegning";if(h==="overblik")h="dashboard";if(h==="udl")h="dashboard";
+  const nv=["planlaegning","dashboard","ugeplan","rapporter","indstillinger"].includes(h)?h:"ugeplan",pv=S.view;
+  if(nv==="planlaegning"&&(pv!=="planlaegning"||!S._uy)){S._uy=[S.year,S.week];setPlanYear(S.planYear||PLAN_START);}
+  else if(nv!=="planlaegning"&&pv==="planlaegning"&&S._uy){S.planYear=S.year;[S.year,S.week]=S._uy;S._uy=null;}
+  S.view=nv;render();window.scrollTo(0,0);}
 window.addEventListener("hashchange",route);
 
 // ---------- Planlægning: mal uger og træk-og-slip ----------

@@ -1,7 +1,8 @@
 // SPORT LIVE Reklameafvikling – forbindelse til Google Sheets via Apps Script.
 // Indstillinger (adresse, logo, opdateringsinterval) ligger i js/config.js.
 const {API_URL, LOGO_URL, OPDATER_MINUTTER} = window.SL_CONFIG || {};
-if(LOGO_URL)document.addEventListener("DOMContentLoaded",()=>{const w=document.getElementById("wm");if(w){const i=new Image();i.src=LOGO_URL;i.alt="SPORT LIVE";i.style.height="26px";i.style.display="block";w.replaceWith(i);}});
+// Logo: skiftes først ud, når billedet er hentet. Mangler filen, bliver tekstlogoet stående.
+if(LOGO_URL){const sw=()=>{const w=document.getElementById("wm");if(!w)return;const i=new Image();i.alt="SPORT LIVE";i.style.height="26px";i.style.display="block";i.onload=()=>{if(w.isConnected)w.replaceWith(i);};i.src=LOGO_URL;};if(document.readyState==="loading")document.addEventListener("DOMContentLoaded",sw);else sw();}
 (function(){
   const KEY="sl-reklame-login";
   let auth=null;try{auth=JSON.parse(localStorage.getItem(KEY)||"null");}catch(e){}

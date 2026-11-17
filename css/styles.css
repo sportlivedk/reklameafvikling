@@ -144,6 +144,9 @@ textarea{resize:vertical;min-height:60px}
 .pg th.w.m{border-left:2px solid var(--line)}
 .pg th.w i{display:block;font-style:normal;font-size:10px;font-weight:700;text-transform:uppercase;color:var(--ink);height:12px}
 .pg td.c{height:30px;cursor:pointer;touch-action:none;border-right:1px solid color-mix(in srgb,var(--line) 60%,transparent)}
+.tots{display:grid;grid-template-columns:1fr auto;gap:2px 12px;padding:8px 14px 10px;border-top:1px solid var(--line);font-size:12.5px;color:var(--muted);background:color-mix(in srgb,var(--ink) 3%,transparent)}.tots b{color:var(--ink);text-align:right;font-variant-numeric:tabular-nums}
+.mtsum{display:flex;gap:6px;flex-wrap:wrap}.mtsum>div{display:flex;flex-direction:column;align-items:flex-end;padding:6px 12px;border:1px solid var(--line);border-radius:8px;background:var(--surface);min-width:120px}.mtsum span{font-size:11px;color:var(--muted)}.mtsum b{font-size:17px;font-variant-numeric:tabular-nums}.mtsum small{font-size:10.5px;color:var(--muted)}
+.mtsum .pl{border-color:var(--accent);background:color-mix(in srgb,var(--accent) 12%,var(--surface))}.mtsum .pl b{color:var(--accent)}
 .pg td.c{position:relative}
 .pg td.c.on::before{content:"";position:absolute;top:5px;bottom:5px;left:0;right:-1px;z-index:1;background:linear-gradient(180deg,color-mix(in srgb,var(--kc) 82%,#fff),var(--kc) 55%,color-mix(in srgb,var(--kc) 88%,#000));box-shadow:0 1px 2px rgba(0,0,0,.35)}
 .pg td.c.on.s::before{left:3px;border-top-left-radius:7px;border-bottom-left-radius:7px}

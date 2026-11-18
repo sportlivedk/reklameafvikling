@@ -42,7 +42,7 @@ if(LOGO_URL){const sw=()=>{const w=document.getElementById("wm");if(!w)return;co
   const snapDoc=p=>({id:p.split("/")[1],exists:!!st.docs[p],data:()=>st.docs[p]||undefined,metadata:meta});
   const emit=()=>{subs.col.forEach(f=>{try{f(snapCol());}catch(e){console.error(e);}});Object.keys(subs.doc).forEach(p=>subs.doc[p].forEach(f=>{try{f(snapDoc(p));}catch(e){console.error(e);}}));};
   let lastCheck=0;
-  function ingest(s){lastCheck=Date.now();st.bookings=new Map((s.bookings||[]).map(b=>{const {id,...r}=b;return [id,r];}));st.docs["config/main"]=s.cfg||null;st.docs["config/kategorier"]=s.kat||null;st.docs["status/godkendt"]={uger:s.godkendt||{}};st.me=s.me||st.me;st.ver=s.version;readyRes();emit();}
+  function ingest(s){lastCheck=Date.now();st.bookings=new Map((s.bookings||[]).map(b=>{const {id,...r}=b;return [id,r];}));st.docs["config/main"]=s.cfg||null;st.docs["config/kategorier"]=s.kat||null;st.docs["status/godkendt"]={uger:s.godkendt||{}};st.me=s.me||st.me;st.mails=s.mails||{};st.mailTest=s.mailTest||"";st.ver=s.version;readyRes();emit();}
   function load(){if(!auth||!auth.kode){showLogin();return Promise.resolve();}
     if(!loading)loading=call("getState").then(ingest).catch(e=>{if(e.code!=="auth"){readyRes();subs.colErr.forEach(f=>f&&f(e));}}).finally(()=>{loading=null;});return loading;}
   // Tjek for ændringer fra andre: hvert X. minut (config.js), og når man vender tilbage til fanen efter mindst 2 min.
@@ -74,5 +74,7 @@ if(LOGO_URL){const sw=()=>{const w=document.getElementById("wm");if(!w)return;co
   window.claude={use:async n=>({db,user,downloads})[n]||null};
   // Slet et break med alle dets bookinger i ét kald
   async function deleteBreak(id){pending++;try{await call("deleteBreak",id);}finally{pending--;}await load();}
-  window.__gas={st,load,deleteBreak};
+  // Send "ugen er klar"-mail til alle i fanen Brugere (via Apps Script / firmaets Google-konto)
+  async function sendKlar(o){pending++;try{const r=await call("sendKlar",o);st.mails=st.mails||{};st.mails[r.key]={at:r.at,by:r.by,n:r.n,test:r.test||""};st.mailTest=r.test||"";emit();return r;}finally{pending--;}}
+  window.__gas={st,load,deleteBreak,sendKlar};
 })();

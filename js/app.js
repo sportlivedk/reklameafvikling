@@ -9,8 +9,8 @@ const DEFAULT_BREAKS = [
   {id:"RB2",navn:"Reklamebreak 2",type:"Reklamebreak",perDag:6,bumper:7,buffer:10,snit:true},
   {id:"RB3",navn:"Reklamebreak 3",type:"Reklamebreak",perDag:6,bumper:7,buffer:10,snit:true},
   {id:"RB4",navn:"Reklamebreak 4",type:"Reklamebreak",perDag:6,bumper:7,buffer:10,snit:true},
-  {id:"PB1",navn:"Powerbreak 1",type:"Powerbreak",perDag:5,bumper:7,buffer:8,snit:true},
-  {id:"PB2",navn:"Powerbreak 2",type:"Powerbreak",perDag:5,bumper:7,buffer:8,snit:true},
+  {id:"PB1",navn:"Powerbreak 1",type:"Powerbreak",perDag:5,bumper:7,buffer:3,snit:true},
+  {id:"PB2",navn:"Powerbreak 2",type:"Powerbreak",perDag:5,bumper:7,buffer:3,snit:true},
   {id:"SB1",navn:"Sponsorbreak 1",type:"Sponsorbreak",perDag:4,bumper:0,buffer:0,snit:false},
   {id:"SB2",navn:"Sponsorbreak 2",type:"Sponsorbreak",perDag:4,bumper:0,buffer:0,snit:false},
   {id:"SB3",navn:"Sponsorbreak 3",type:"Sponsorbreak",perDag:4,bumper:0,buffer:0,snit:false},
@@ -103,7 +103,7 @@ function groupAvg(y,w,type){const bs=S.cfg.breaks.filter(b=>b.type===type&&b.sni
 
 // ---------- Rendering ----------
 function render(){
-  {const w=document.getElementById("who");if(w&&window.__gas&&__gas.st.me.email){w.textContent=__gas.st.me.email+" · "+__gas.st.me.role;document.getElementById("logout").hidden=false;}}
+  {const w=document.getElementById("who");if(w&&window.__gas&&__gas.st.me.email){w.textContent=__gas.st.me.email.split("@")[0].toUpperCase();w.title=__gas.st.me.email+" · "+__gas.st.me.role;document.getElementById("logout").hidden=false;}}
   {const tb=document.getElementById("thbtn");if(tb)tb.textContent=document.documentElement.dataset.theme==="light"?"☾":"☀︎";}
   try{drawHist();}catch(e){}
   if(S.paint){S.dirty=true;return;}
@@ -114,7 +114,7 @@ function render(){
   if(S.err){m.innerHTML=`<div class="card pad"><h2>Data kan ikke hentes</h2><p class="muted">${esc(S.err)}</p></div>`;return;}
   if(!S.loaded){m.innerHTML=`<div class="empty">${S.slow?"Forbindelsen til databasen er langsom. Data vises, så snart den svarer.":"Henter afviklingsdata…"}</div>`;return;}
   const v={planlaegning:vPlan,dashboard:vDash,overblik:vDash,ugeplan:vUgeplan,bookinger:vBookinger,rapporter:vRapporter,indstillinger:vIndst}[S.view]||vOverblik;
-  const weekViews=["dashboard","ugeplan"];const notNow=weekViews.includes(S.view)&&(S.year!==TODAY[0]||S.week!==TODAY[1]);
+  const NXT=shiftWeek(TODAY[0],TODAY[1],1);const weekViews=["dashboard","ugeplan"];const notNow=weekViews.includes(S.view)&&(S.year!==TODAY[0]||S.week!==TODAY[1])&&!(S.view==="ugeplan"&&S.year===NXT[0]&&S.week===NXT[1]);
   const wkBanner=notNow?`<div class="wkban" role="status"><span>Du ser <b>uge ${S.week}, ${S.year}</b> (${esc(weekLabel(S.year,S.week))}). Denne uge er uge ${TODAY[1]}.</span><button class="btn sm" data-a="wk-now">Gå til denne uge</button></div>`:"";
   document.getElementById("wk").classList.toggle("notnow",notNow);
   m.innerHTML=wkBanner+(S.slow?`<div class="banner small">Forbindelsen er ustabil. Det viste kan være forældet.</div>`:"")+(!S.canWrite?`<div class="banner small">Du har kun læseadgang. Bed ejeren om rollen redaktør.</div>`:"")+v();
@@ -176,14 +176,29 @@ function planWeeks(){const nW=weeksIn(S.year);const k=S.pwin;
   if(k==="aar")return [1,nW];if(k==="Q1")return [1,13];if(k==="Q2")return [14,26];if(k==="Q3")return [27,39];if(k==="Q4")return [40,nW];
   let a=Math.max(1,S.week-1);let b=Math.min(nW,a+12);a=Math.max(1,b-12);return [a,b];}
 function library(){const m=new Map();
-  for(const b of all()){const k=b.kunde+"|"+b.sek;const o=m.get(k);if(!o||(b.year>o.year))m.set(k,{kunde:b.kunde,sek:+b.sek,kanal:b.kanal,spot:b.spot||"",year:b.year});}
-  for(const x of S.lib){const k=x.kunde+"|"+x.sek;if(!m.has(k))m.set(k,x);}
-  return [...m.values()].sort((a,b)=>a.kunde.localeCompare(b.kunde,"da")||a.sek-b.sek);}
+  for(const b of all()){const k=b.kunde+"|"+(b.spot||"")+"|"+b.sek;const o=m.get(k);if(!o||(b.year>o.year))m.set(k,{kunde:b.kunde,sek:+b.sek,kanal:b.kanal,spot:b.spot||"",year:b.year});}
+  for(const x of S.lib){const k=x.kunde+"|"+(x.spot||"")+"|"+x.sek;if(!m.has(k))m.set(k,x);}
+  return [...m.values()].sort((a,b)=>a.kunde.localeCompare(b.kunde,"da")||(a.spot?0:1)-(b.spot?0:1)||(a.spot||"").localeCompare(b.spot||"","da",{numeric:true})||a.sek-b.sek);}
+// Et spot = kunde + spotnavn + længde
+const libFind=(k,sp,s)=>library().find(x=>x.kunde===k&&(x.spot||"")===(sp||"")&&+x.sek===+s)||library().find(x=>x.kunde===k&&+x.sek===+s)||{kanal:"Castory",spot:sp||""};
+const sameSpot=(x,k,sp,s)=>x.kunde===k&&+x.sek===+s&&(x.spot||"")===(sp||"");
+const spotLbl=sp=>sp?esc(sp):`<span class="spmiss">Uden navn</span>`;
+function libList(lib,kfn){if(!lib.length)return `<p class="muted small">Ingen kunder eller spots matcher</p>`;let out="",cur=null;
+  for(const x of lib){if(x.kunde!==cur){if(cur!==null)out+=`</div>`;cur=x.kunde;out+=`<div class="lkg"><div class="lkh"><b>${esc(x.kunde)}</b>${kat(x.kunde)?`<span class="ktag">${esc(kat(x.kunde))}</span>`:""}</div>`;}
+    out+=`<div class="dchip spchip" draggable="${S.canWrite!==false}" data-k="${esc(x.kunde)}" data-sp="${esc(x.spot||"")}" data-s="${x.sek}" style="border-left-color:var(${KVAR[kfn(x.kanal)]||"--k-eg"})" title="${esc(x.kunde+" · "+(x.spot||"spot uden navn")+" · "+x.sek+" sek · "+kfn(x.kanal))}"><b>${spotLbl(x.spot)}</b><span>${x.sek}s</span></div>`;}
+  return out+`</div>`;}
+const spotOpts=k=>library().filter(x=>x.kunde===k&&x.spot).map(x=>`<option value="${esc(x.spot)}">${x.sek}s</option>`).join("");
+// Kampagnens første og sidste uge for et spot i et break (pauser undervejs tæller ikke). Fortsætter over årsskiftet = ingen markering.
+function campSpan(y,breakId,x){const ws=new Set();for(const b of all())if(+b.year===+y&&b.breakId===breakId&&live(b)&&sameSpot(b,x.kunde,x.spot,x.sek))b.uger.forEach(u=>ws.add(+u));
+  if(!ws.size)return {start:null,end:null};let start=Math.min(...ws),end=Math.max(...ws);const nW=weeksIn(y);
+  const runs=(yy,wk)=>all().some(b=>+b.year===yy&&b.breakId===breakId&&live(b)&&sameSpot(b,x.kunde,x.spot,x.sek)&&b.uger.includes(wk));
+  if(start===1&&runs(+y-1,weeksIn(+y-1)))start=null;if(end===nW&&runs(+y+1,1))end=null;return {start,end};}
+const libMatch=q=>x=>!q||x.kunde.toLowerCase().includes(q)||(x.spot||"").toLowerCase().includes(q);
 function vPlan(){
   const y=S.year,[a,z]=planWeeks();const t=S.pt;const q=S.pq.trim().toLowerCase();
   const tabs=TYPES.map(tp=>{const n=S.cfg.breaks.filter(b=>b.type===tp).reduce((s,b)=>s+activeIn(y,S.week,b.id).length,0);return `<button class="${tp===t?"on":""}" data-a="ptab" data-t="${tp}">${tp}s <span>${n} spots i uge ${S.week}</span></button>`;}).join("");
   const wins=[["13","13 uger"],["Q1","Q1"],["Q2","Q2"],["Q3","Q3"],["Q4","Q4"],["aar","Hele året"]];
-  const lib=library().filter(x=>!q||x.kunde.toLowerCase().includes(q));
+  const lib=library().filter(libMatch(q));
   const ws=[];for(let w=a;w<=z;w++)ws.push(w);
   const mon=w=>weekMon(y,w);const isM=w=>w===a||mon(w).getUTCMonth()!==mon(w-1).getUTCMonth();
   const head=`<tr><th class="lc" style="text-align:left;font-size:12px;color:var(--muted)">Kunde · sek</th>${ws.map(w=>{const cur=y===TODAY[0]&&w===TODAY[1];const sel=w===S.week;return `<th class="w${isM(w)?" m":""}${cur?" cur":""}" title="Uge ${w}: ${esc(weekLabel(y,w))}"><i>${isM(w)?MDR[mon(w).getUTCMonth()]:""}</i><a href="#" data-a="pweek" data-w="${w}" style="color:inherit;text-decoration:${sel?"underline":"none"}">${w}</a></th>`;}).join("")}</tr>`;
@@ -193,13 +208,13 @@ function vPlan(){
     const col=S.collapsed.has(b.id);
     const lens=ws.map(w=>breakLen(y,w,b.id));const M=maksOf(b);const Lw=breakLen(y,S.week,b.id);const cfw=new Map(ws.map(w=>[w,conflictsIn(y,w,b.id)]).filter(([,c])=>c.length));const avg=groupAvg(y,S.week,t);
     const body=col?"":vis.map(x=>{const set=new Set(x.uger);const kc=`var(${KVAR[x.kanal]||"--k-eg"})`;
-      return `<tr><td class="lc" title="${esc(x.kunde+(x.spot?" · "+x.spot:"")+(x.note?" · "+x.note:""))}"><div class="lci"><span class="sw" style="background:${kc}"></span><a href="#" data-a="edit" data-id="${esc(x.id)}">${esc(x.kunde)}</a><small>${x.sek}s</small>${ktag(x.kunde)}${x.status!=="Bekræftet"?` <span class="chip ${STCLS[x.status]}" style="font-size:10px;padding:0 5px">${esc(x.status)}</span>`:""}${S.canWrite!==false?`<span class="rowact"><button class="btn ghost icon sm" data-a="swap" data-id="${esc(x.id)}" title="Skift kunde ud" aria-label="Skift ${esc(x.kunde)} ud">⇄</button><button class="btn ghost icon sm danger" data-a="rm" data-id="${esc(x.id)}" title="Fjern kunde" aria-label="Fjern ${esc(x.kunde)}">✕</button></span>`:""}</div></td>${ws.map(w=>{const on=set.has(w);const st=on&&(w===a||!set.has(w-1)),en=on&&(w===z||!set.has(w+1));let rl=0;if(st){while(set.has(w+rl)&&w+rl<=z)rl++;}return `<td class="c${on?" on":""}${st?" s":""}${en?" e":""}${set.has(w)&&(cfw.get(w)||[]).some(c=>c[0]===x.kunde||c[1]===x.kunde)?" cf":""}${y===TODAY[0]&&w===TODAY[1]?" cur":""}" style="--kc:${kc}${st?`;--rl:${rl}`:""}"${st&&rl>=2?` data-lbl="${esc(x.kunde+" · "+x.sek+"s")}"`:""} data-id="${esc(x.id)}" data-b="${b.id}" data-w="${w}"></td>`;}).join("")}</tr>`;}).join("")
+      return `<tr><td class="lc" title="${esc(x.kunde+(x.spot?" · "+x.spot:"")+(x.note?" · "+x.note:""))}"><div class="lci"><span class="sw" style="background:${kc}"></span><a href="#" data-a="edit" data-id="${esc(x.id)}">${esc(x.kunde)}</a><small>${x.sek}s</small>${ktag(x.kunde)}${x.status!=="Bekræftet"?` <span class="chip ${STCLS[x.status]}" style="font-size:10px;padding:0 5px">${esc(x.status)}</span>`:""}${S.canWrite!==false?`<span class="rowact"><button class="btn ghost icon sm" data-a="swap" data-id="${esc(x.id)}" title="Skift kunde ud" aria-label="Skift ${esc(x.kunde)} ud">⇄</button><button class="btn ghost icon sm danger" data-a="rm" data-id="${esc(x.id)}" title="Fjern kunde" aria-label="Fjern ${esc(x.kunde)}">✕</button></span>`:""}</div></td>${ws.map(w=>{const on=set.has(w);const st=on&&(w===a||!set.has(w-1)),en=on&&(w===z||!set.has(w+1));let rl=0;if(st){while(set.has(w+rl)&&w+rl<=z)rl++;}return `<td class="c${on?" on":""}${st?" s":""}${en?" e":""}${set.has(w)&&(cfw.get(w)||[]).some(c=>c[0]===x.kunde||c[1]===x.kunde)?" cf":""}${y===TODAY[0]&&w===TODAY[1]?" cur":""}" style="--kc:${kc}${st?`;--rl:${rl}`:""}"${st&&rl>=2?` data-lbl="${esc(x.kunde+(x.spot?" · "+x.spot:"")+" · "+x.sek+"s")}"`:""} data-id="${esc(x.id)}" data-b="${b.id}" data-w="${w}"></td>`;}).join("")}</tr>`;}).join("")
       +`<tr class="drop"><td class="lc">Træk en kunde hertil</td>${ws.map(w=>`<td class="c${y===TODAY[0]&&w===TODAY[1]?" cur":""}" data-b="${b.id}" data-w="${w}"></td>`).join("")}</tr>`;
     const lenRow=`<tr class="len"><td class="lc">Længde${b.bumper?` inkl. ${b.bumper}s ind/ud`:""}</td>${lens.map((L,i)=>`<td class="${t!=="Sponsorbreak"&&avg&&L>avg*1.15?"hi":""}${cfw.has(ws[i])?" cf":""}${y===TODAY[0]&&ws[i]===TODAY[1]?" cur":""}" data-lb="${b.id}" data-lw="${ws[i]}" title="Uge ${ws[i]}: ${fmtDur(L)}${M?" af maks "+fmtDur(M)+" ("+Math.round(L/M*100)+" %)":""}${cfw.has(ws[i])?" · Brancheregel brudt: "+esc(cfw.get(ws[i]).map(c=>c[0]+" + "+c[1]).join(", ")):""}">${M?`<div class="gz"><i class="${pctCls(L/M)}" style="height:${Math.min(L/M,1.25)/1.25*100}%"></i><b></b></div>`:""}<span class="lv">${L?fmtDur(L):"–"}</span>${deltaHtml(L-baseLen(y,ws[i],b.id))}</td>`).join("")}</tr>`;
     return `<section class="card pblk"><header><div class="row" style="gap:10px"><button class="btn ghost icon sm" data-a="pcol" data-b="${b.id}" aria-expanded="${!col}" aria-label="Fold ${esc(b.navn)}">${col?"▸":"▾"}</button><h3>${esc(b.navn)}</h3>${ekstraTag(b)}${isX(b)&&S.isOwner!==false?`<button class="btn ghost icon sm danger rmx" data-a="rm-brk" data-id="${b.id}" title="Slet ${esc(b.navn)}" aria-label="Slet ${esc(b.navn)}">🗑</button>`:""}<span class="note">${b.perDag} gange dagligt · ${vis.length} kunder i perioden${hidden?` · ${hidden} uden for perioden`:""}</span>${cfw.size?`<span class="conf small">Brancheregel brudt i uge ${esc(ranges([...cfw.keys()]))}</span>`:""}</div>
       <div class="hgz"><span class="note">Uge ${S.week}</span><b class="num">${fmtDur(Lw)}</b>${deltaHtml(Lw-baseLen(y,S.week,b.id),"dlt")}${M?`<div class="blb" title="${fmtDur(Lw)} af maks ${fmtDur(M)}"><i class="${pctCls(Lw/M)}" style="width:${Math.min(Lw/M,1.25)/1.25*100}%"></i><b style="left:${100/1.25}%"></b></div><span class="note num">${Math.round(Lw/M*100)} % af ${fmtDur(M)}</span>`:""}</div></header>
       <div class="pg"><table style="width:max(100%, ${240+ws.length*32}px)"><thead>${head}</thead><tbody>${body}${lenRow}</tbody></table></div></section>`;}).join("");
-  const libHtml=lib.map(x=>`<div class="dchip" draggable="${S.canWrite!==false}" data-k="${esc(x.kunde)}" data-s="${x.sek}" style="border-left-color:var(${KVAR[kanalFor(S.year,x.kanal)]||"--k-eg"})" title="${esc(kanalFor(S.year,x.kanal)+(x.spot?" · "+x.spot:""))}"><b>${esc(x.kunde)}</b><span>${kat(x.kunde)?`<span class="ktag">${esc(kat(x.kunde))}</span> `:""}${x.sek}s</span></div>`).join("")||`<p class="muted small">Ingen kunder matcher</p>`;
+  const libHtml=libList(lib,k=>kanalFor(S.year,k));
   return `<div class="row between"><div class="row" style="gap:14px"><h2>Planlægning ${y}</h2><div class="seg" role="group" aria-label="Vælg år">${planYears().map(x=>`<button class="${x===y?"on":""}" data-a="pyear" data-y="${x}">${x}</button>`).join("")}</div></div><div class="row"><div class="seg" role="group" aria-label="Periode">${wins.map(([k,l])=>`<button class="${S.pwin===k?"on":""}" data-a="pwin" data-k="${k}">${l}</button>`).join("")}</div>${S.canWrite!==false?`<button class="btn pri" data-a="new">+ Ny booking</button>`:""}</div></div>
   <div class="tabs" role="tablist">${tabs}</div>
   ${(()=>{let n=0,tot=0;for(const [k,v] of S.base){const [yy,id,w]=k.split("|");if(+yy!==y)continue;const d=breakLen(y,+w,id)-v;if(d){n++;tot+=d;}}return n?`<div class="banner small row between" style="background:var(--surface);border-color:var(--line)"><span>Ændringer siden du åbnede siden: <b>${n}</b> break-uger ændret, i alt <b>${tot>0?"+":"−"}${Math.abs(tot)} sek</b>. Tallene under hvert break viser ændringen pr. uge.</span><button class="btn sm" data-a="base-reset">Nulstil ændringer</button></div>`:"";})()}
@@ -218,21 +233,21 @@ async function setWeeks(id,uger,quiet){const b=S.bookings.get(id);if(!b)return;l
   if(!quiet){const add=nu.filter(w=>!b.uger.includes(w)),del=b.uger.filter(w=>!nu.includes(w));const parts=[];if(add.length)parts.push(`+${b.sek}s i uge ${ranges(add)}`);if(del.length)parts.push(`−${b.sek}s i uge ${ranges(del)}`);toast(`${b.kunde}, ${brk(b.breakId).navn}: ${parts.join(" · ")}`);}
   if(!nu.length){toast("Bookingen har ingen uger. Slet den i bookingvinduet, hvis den skal væk.");}
   await dbUpdate(id,{uger:nu});}
-async function dropLib(kunde,sek,breakId,w){
+async function dropLib(kunde,sek,breakId,w,spot=""){
   const bl=blocked(S.year,breakId,kunde,[w]);if(bl.length){toast("Ikke tilladt: "+blockMsg(kunde,breakId,bl));return;}
-  const ex=all().find(x=>x.year===S.year&&x.breakId===breakId&&x.kunde===kunde&&+x.sek===+sek&&live(x));
-  if(ex){if(ex.uger.includes(w)){toast(`${kunde} kører allerede i uge ${w}`);return;}await setWeeks(ex.id,[...ex.uger,w]);return;}
-  const src=library().find(x=>x.kunde===kunde&&+x.sek===+sek)||{kanal:"Castory",spot:""};
+  const ex=all().find(x=>x.year===S.year&&x.breakId===breakId&&sameSpot(x,kunde,spot,sek)&&live(x));
+  if(ex){if(ex.uger.includes(w)){toast(`${kunde}${spot?" · "+spot:""} kører allerede i uge ${w}`);return;}await setWeeks(ex.id,[...ex.uger,w]);return;}
+  const src=libFind(kunde,spot,sek);
   const id=S.db.collection("bookings").doc().id;
-  if(await writeDoc(id,clean({year:S.year,breakId,kunde,kanal:src.kanal,spot:src.spot||"",sek:+sek,pos:null,uger:[w],status:"Bekræftet",note:"",ordrenr:""})))toast(`${kunde} lagt i ${brk(breakId).navn}, uge ${w}: +${sek}s`);
+  if(await writeDoc(id,clean({year:S.year,breakId,kunde,kanal:src.kanal,spot:spot||"",sek:+sek,pos:null,uger:[w],status:"Bekræftet",note:"",ordrenr:""})))toast(`${kunde} lagt i ${brk(breakId).navn}, uge ${w}: +${sek}s`);
 }
 // --- Ugeplan
 function libPanel(hint){
-  const q=S.pq.trim().toLowerCase();const lib=library().filter(x=>!q||x.kunde.toLowerCase().includes(q));
-  const libHtml=lib.map(x=>`<div class="dchip" draggable="${S.canWrite!==false}" data-k="${esc(x.kunde)}" data-s="${x.sek}" style="border-left-color:var(${KVAR[x.kanal]||"--k-eg"})" title="${esc(x.kanal+(x.spot?" · "+x.spot:""))}"><b>${esc(x.kunde)}</b><span>${kat(x.kunde)?`<span class="ktag">${esc(kat(x.kunde))}</span> `:""}${x.sek}s</span></div>`).join("")||`<p class="muted small">Ingen kunder matcher</p>`;
-  return `<aside class="card lib"><div class="hd"><h3>Kunder og spots</h3><input type="search" id="pq" data-pq="1" placeholder="Søg kunde" value="${esc(S.pq)}" aria-label="Søg kunde">
+  const q=S.pq.trim().toLowerCase();const lib=library().filter(libMatch(q));
+  const libHtml=libList(lib,k=>kanalFor(S.year,k));
+  return `<aside class="card lib"><div class="hd"><h3>Kunder og spots</h3><input type="search" id="pq" data-pq="1" placeholder="Søg kunde eller spot" value="${esc(S.pq)}" aria-label="Søg kunde eller spot">
       <p class="note" style="margin:0">${hint}</p>
-      ${S.canWrite!==false?`<details><summary class="small" style="cursor:pointer;font-weight:600">+ Ny kunde eller spotlængde</summary><div style="display:grid;gap:6px;margin-top:8px"><input type="text" id="nl-k" placeholder="Kunde" aria-label="Kunde"><div class="row" style="gap:6px;flex-wrap:nowrap"><input type="number" id="nl-s" placeholder="Sek" min="1" style="width:70px" aria-label="Sekunder"><select id="nl-ka" aria-label="Salgskanal" style="flex:1">${kanalerFor(S.year).map(k=>`<option>${k}</option>`).join("")}</select></div><button class="btn sm" data-a="nl-add">Tilføj til listen</button></div></details>`:""}</div>
+      ${S.canWrite!==false?`<details><summary class="small" style="cursor:pointer;font-weight:600">+ Nyt spot</summary><div style="display:grid;gap:6px;margin-top:8px"><input type="text" id="nl-k" placeholder="Kunde" aria-label="Kunde" list="nl-kl"><datalist id="nl-kl">${kunder().map(k=>`<option value="${esc(k)}">`).join("")}</datalist><input type="text" id="nl-sp" placeholder="Spotnavn, fx R018 Julekampagne" aria-label="Spotnavn" maxlength="80"><div class="row" style="gap:6px;flex-wrap:nowrap"><input type="number" id="nl-s" placeholder="Sek" min="1" style="width:70px" aria-label="Sekunder"><select id="nl-ka" aria-label="Salgskanal" style="flex:1">${kanalerFor(S.year).map(k=>`<option>${k}</option>`).join("")}</select></div><button class="btn sm" data-a="nl-add">Tilføj spot</button></div></details>`:""}</div>
       <div class="ls">${libHtml}</div></aside>`;}
 function vUgeplan(){
   const y=S.year,w=S.week,[py,pw]=shiftWeek(y,w,-1),[ny,nw]=shiftWeek(y,w,1);
@@ -248,13 +263,23 @@ function vUgeplan(){
   const gk=S.godk[y+"-"+w];let changedAfter=[];
   if(gk&&Array.isArray(gk.sig)){const cur=new Set(weekSig(y,w)),old=new Set(gk.sig);const add=[...cur].filter(x=>!old.has(x)),rem=[...old].filter(x=>!cur.has(x));
     changedAfter=[...add.map(x=>({kunde:"+ "+x.split("|")[1]+" ("+x.split("|")[0]+")"})),...rem.map(x=>({kunde:"− "+x.split("|")[1]+" ("+x.split("|")[0]+")"}))];}
-  const gkBox=`<div class="gk ${gk?(changedAfter.length?"warn":"ok"):""}">${gk?`<span class="gkd" aria-hidden="true">${changedAfter.length?"!":"✓"}</span><span><b>${changedAfter.length?"Ændret efter godkendelse":"Uge "+w+" er godkendt"}</b><span class="small">Godkendt af ${esc(gk.by||"ukendt")} ${esc(new Date(gk.at).toLocaleString("da-DK",{dateStyle:"short",timeStyle:"short"}))}${changedAfter.length?` · ${changedAfter.length} ændring${changedAfter.length===1?"":"er"} siden: ${esc(changedAfter.map(b=>b.kunde).slice(0,5).join(", "))}${changedAfter.length>5?" …":""}`:""}</span></span>${S.canWrite!==false?`${changedAfter.length?`<button class="btn sm pri" data-a="godk">Godkend igen</button>`:""}<button class="btn sm ghost" data-a="ugodk">Fjern godkendelse</button>`:""}`
-    :`<span class="gkd" aria-hidden="true">○</span><span><b>Uge ${w} er ikke godkendt</b><span class="small">Godkend, når listen er klar til afvikling. Så kan Castory og Continuity se, at den er færdig.</span></span>${S.canWrite!==false?`<button class="btn sm pri" data-a="godk">Godkend uge ${w}</button>`:""}`}</div>`;
-  return `<div class="row between noprint"><div class="row" style="gap:14px"><h2>Afviklingsliste uge ${w}</h2><div class="seg" role="group" aria-label="Vælg uge">${(()=>{const [ny2,nw2]=shiftWeek(TODAY[0],TODAY[1],1);return `<button class="${y===TODAY[0]&&w===TODAY[1]?"on":""}" data-a="wk-now">Denne uge (${TODAY[1]})</button><button class="${y===ny2&&w===nw2?"on":""}" data-a="wk-nextnow">Næste uge (${nw2})</button>`;})()}</div></div>
+  const mk=`${y}-${String(w).padStart(2,"0")}`,ml=(window.__gas&&__gas.st.mails||{})[mk];
+  const canMail=!!(window.__gas&&__gas.sendKlar&&S.canWrite!==false),mtest=window.__gas&&__gas.st.mailTest,cw2=S.canWrite!==false;
+  const dt=x=>esc(new Date(x).toLocaleString("da-DK",{dateStyle:"short",timeStyle:"short"}));
+  const mailInfo=ml?`<span class="gki">✉ Mail sendt ${dt(ml.at)}${ml.test?" (test)":` til ${ml.n}`}</span>`:"";
+  const testTag=canMail&&mtest?`<span class="mtest" title="Mailen sendes kun til ${esc(mtest)}, indtil testtilstanden slås fra i Code.gs">TEST · kun til ${esc(mtest)}</span>`:"";
+  const gkBox=gk
+    ?`<div class="gk ${changedAfter.length?"warn":"ok"}"><span class="gkd" aria-hidden="true">${changedAfter.length?"!":"✓"}</span><b>${changedAfter.length?`Uge ${w} er ændret efter godkendelse`:`Uge ${w} er godkendt`}</b><span class="gki">${esc(gk.by||"ukendt")} · ${dt(gk.at)}${changedAfter.length?` · ${changedAfter.length} ændring${changedAfter.length===1?"":"er"}: ${esc(changedAfter.map(b=>b.kunde).slice(0,4).join(", "))}${changedAfter.length>4?" …":""}`:""}</span>${mailInfo}<span class="gksp"></span>${testTag}
+      ${cw2?`${changedAfter.length?`<button class="btn sm pri" data-a="${canMail?"godk-mail":"godk"}">${canMail?"Godkend igen og send mail":"Godkend igen"}</button>`:""}${canMail?`<button class="btn sm${changedAfter.length?" ghost":""}" data-a="sendklar">✉ ${ml?"Send mail igen":"Send mail"}</button>`:""}<button class="btn sm ghost" data-a="ugodk">Fjern godkendelse</button>`:""}</div>`
+    :`<div class="gk"><span class="gkd" aria-hidden="true">○</span><b>Uge ${w} er ikke godkendt</b><span class="gki" title="Godkend, når listen er klar til afvikling. Så kan Castory og Continuity se, at den er færdig.">Godkend, når listen er klar</span>${mailInfo}<span class="gksp"></span>${testTag}
+      ${cw2?(canMail?`<button class="btn sm pri" data-a="godk-mail" title="Godkender ugen og sender mail med link til alle i fanen Brugere">✓ Godkend og send mail</button><button class="btn sm ghost" data-a="godk">Kun godkend</button>`:`<button class="btn sm pri" data-a="godk">Godkend uge ${w}</button>`):""}</div>`;
+  return `<div class="row between noprint"><div class="row" style="gap:14px"><h2>Afviklingsliste uge ${w}</h2><span class="note wkl">${esc(weekLabel(y,w))}</span><div class="seg" role="group" aria-label="Vælg uge">${(()=>{const [ny2,nw2]=shiftWeek(TODAY[0],TODAY[1],1);return `<button class="${y===TODAY[0]&&w===TODAY[1]?"on":""}" data-a="wk-now">Denne uge (${TODAY[1]})</button><button class="${y===ny2&&w===nw2?"on":""}" data-a="wk-nextnow">Næste uge (${nw2})</button>`;})()}</div><details class="helpd"><summary class="btn sm ghost" title="Hjælp og genveje">? Hjælp</summary><div class="helpp card pad">
+      <p><b>Sådan arbejder du</b><br>Træk et spot fra listen ind i et break. Slip oven på en reklame for at bytte. Træk mellem breaks for at flytte eller kopiere. Træk ned i skraldespanden for at fjerne.</p>
+      <p><b>Mærker</b><br><span class="tag-new">Starter</span> = kampagnens første uge · <span class="tag-end">Slutter</span> = kampagnens sidste uge · Pauser undervejs markeres ikke · Tallet foran er rækkefølgen i breaket.</p>
+      <p><b>Genveje</b><br>Ctrl+Z fortryd · 1–3 vælg periode i dialogen · F/K flyt eller kopiér · Esc luk.</p></div></details></div>
     <div class="row"><button class="btn" data-a="copy-week">Kopiér som tekst</button>${S.dl?`<button class="btn" data-a="xlsx-week">Hent Excel</button>`:""}${S.canWrite!==false?`<button class="btn pri" data-a="new">+ Ny booking</button>`:""}</div></div>
-    ${(()=>{let seen=false;try{seen=localStorage.getItem("sl-tip-ug")==="1";}catch(e){}return seen||S.canWrite===false?"":`<div class="tip1" role="note"><span><b>Tip:</b> Træk kunder fra listen ind i et break. Brug <b>⇄</b> til at skifte en kunde ud og <b>✕</b> til at fjerne den. Alt kan fortrydes med <b>↶ Fortryd</b> øverst eller Ctrl+Z.</span><button class="btn sm" data-a="tip-ok">Forstået</button></div>`;})()}
+
     ${gkBox}
-    <p class="note" style="margin:-8px 0 0">${esc(weekLabel(y,w))}. <span class="tag-new">Ny</span> = ikke med i uge ${pw}. <span class="tag-end">Sidste uge</span> = ikke med i uge ${nw}.</p>
     <div class="plan">${libPanel("Træk en kunde ind i et break. Slip oven på en kunde for at bytte. Ctrl+Z fortryder.")}
     <div style="display:flex;flex-direction:column;gap:20px;min-width:0">${sec}</div></div>
     <div id="trash" class="trash" hidden aria-hidden="true">Slip her for at fjerne fra breaket</div>`;
@@ -265,15 +290,15 @@ function breakCard(b,y,w,py,pw,ny,nw){
   const gone=activeIn(py,pw,b.id).filter(x=>!items.some(i=>i.kunde===x.kunde)).map(x=>x.kunde);
   const L=breakLen(y,w,b.id);const cfs=conflictsIn(y,w,b.id);const cfK=new Set(cfs.flatMap(c=>[c[0],c[1]]));
   const cw=S.canWrite!==false;
-  const lis=items.map((x,i)=>{const tag=!prev.has(x.kunde)?` <span class="tag-new">Ny</span>`:(!next.has(x.kunde)?` <span class="tag-end">Sidste uge</span>`:"");
-    const sub=[x.spot,x.note].filter(Boolean).join(" · ");
-    return `<li class="lane-${KCLS[x.kanal]||"EG"}${cfK.has(x.kunde)?" cf":""}" draggable="${cw}" data-sid="${esc(x.id)}" data-bk="${b.id}"><span class="p">${i+1}</span><span class="nm"><b><a href="#" data-a="edit" data-id="${esc(x.id)}" draggable="false" style="color:inherit;text-decoration:none">${esc(x.kunde)}</a></b> ${ktag(x.kunde)}${tag}${x.status!=="Bekræftet"?" "+statusChip(x.status):""}${sub?`<div title="${esc(sub)}">${esc(sub)}</div>`:""}</span>
-      ${cw?`<span class="mv"><button class="btn ghost icon sm" data-a="swap" data-id="${esc(x.id)}" title="Skift kunde ud" aria-label="Skift ${esc(x.kunde)} ud">⇄</button><button class="btn ghost icon sm danger" data-a="rm" data-id="${esc(x.id)}" title="Fjern" aria-label="Fjern ${esc(x.kunde)}">✕</button></span>`:"<span></span>"}
-      <span class="sk">${x.sek}s</span></li>`;}).join("");
+  const lis=items.map((x,i)=>{const sp=campSpan(y,b.id,x);const tag=sp.start===w&&sp.end===w?` <span class="tag-new" title="Kører kun i uge ${w}">Kun denne uge</span>`:sp.start===w?` <span class="tag-new" title="Kampagnen starter i uge ${w}">Starter</span>`:sp.end===w?` <span class="tag-end" title="Kampagnen slutter i uge ${w}">Slutter</span>`:"";
+    const spl=x.spot?`<div class="spn" title="${esc(x.spot)}">${esc(x.spot)}</div>`:"";const sub=x.note||"";
+    return `<li class="lane-${KCLS[x.kanal]||"EG"}${cfK.has(x.kunde)?" cf":""}" draggable="${cw}" data-sid="${esc(x.id)}" data-bk="${b.id}"><span class="p">${i+1}</span><span class="nm"><b><a href="#" data-a="edit" data-id="${esc(x.id)}" draggable="false" style="color:inherit;text-decoration:none">${esc(x.kunde)}</a></b> ${ktag(x.kunde)}${tag}${x.status!=="Bekræftet"?" "+statusChip(x.status):""}${spl}${sub?`<div class="lnote" title="${esc(sub)}">${esc(sub)}</div>`:""}</span>
+      ${cw?`<span class="mv">${x.spot?"":`<button class="btn ghost icon sm" data-a="name-spot" data-id="${esc(x.id)}" title="Giv spottet et navn" aria-label="Giv spottet for ${esc(x.kunde)} et navn">✎</button>`}<button class="btn ghost icon sm" data-a="swap" data-id="${esc(x.id)}" title="Skift kunde ud" aria-label="Skift ${esc(x.kunde)} ud">⇄</button><button class="btn ghost icon sm danger" data-a="rm" data-id="${esc(x.id)}" title="Fjern" aria-label="Fjern ${esc(x.kunde)}">✕</button></span>`:"<span></span>"}
+      <span class="sk">${x.sek}</span></li>`;}).join("");
   const dPrev=L-breakLen(py,pw,b.id),dBase=L-baseLen(y,w,b.id);
-  const bump=items.length&&b.bumper?`<li class="bump"><span class="p">·</span><span class="nm">Breaker ind/ud</span><span></span><span class="sk">${b.bumper}s</span></li>`:"";
+  const bump=items.length&&b.bumper?`<li class="bump"><span class="p">·</span><span class="nm">Breaker ind/ud</span><span></span><span class="sk">${b.bumper}</span></li>`:"";
   return `<article class="card brk${isX(b)?" xbrk":""}" data-dropb="${b.id}"><header><div><h3 style="font-size:16px" title="${esc(b.navn)}">${esc(b.navn)}</h3><div class="note">${b.perDag}× dagligt · ${items.length} spots</div>${isX(b)?`<div class="note xrow">${S.isOwner!==false?`<button class="btn sm xdel" data-a="rm-brk" data-id="${b.id}" title="Slet ${esc(b.navn)}">🗑 Slet</button>`:""}</div>`:""}</div><div style="text-align:right"><div class="len${maksOf(b)&&L>maksOf(b)?" over":""}" ${maksOf(b)&&L>maksOf(b)?`title="Over maks længde ${fmtDur(maksOf(b))}"`:""}>${fmtDur(L)}${deltaHtml(dBase,"dlt")}</div>${maksOf(b)&&L>maksOf(b)?`<div class="overtag">${fmtDur(L-maksOf(b))} over maks ${fmtDur(maksOf(b))}</div>`:""}</div></header>
-    ${cfs.length?`<div class="cfl">Brancheregel brudt: ${cfs.map(c=>esc(c[0]+" + "+c[1])).join(", ")}</div>`:""}<ol>${lis||`<li class="emptyli"><span class="dropz">+ Træk en kunde hertil</span></li>`}${bump}</ol>
+    ${cfs.length?`<div class="cfl">Brancheregel brudt: ${cfs.map(c=>esc(c[0]+" + "+c[1])).join(", ")}</div>`:""}<ol>${lis?`<li class="lhd" aria-hidden="true"><span>Rækkefølge</span><span></span><span>Sek</span></li>`:""}${lis||`<li class="emptyli"><span class="dropz">+ Træk en kunde hertil</span></li>`}${bump}</ol>
     <div class="tots">${b.type==="Sponsorbreak"?`<span>Total antal sekunder</span><b class="num">${L}</b>`:`<span>Total antal sek.</span><b class="num">${L}</b><span>Total antal min.</span><b class="num">${fmtDur(L)}</b>`}</div>
     ${gone.length?`<footer><span>Udgår fra uge ${pw}: ${esc(gone.join(", "))}</span></footer>`:""}</article>`;
 }
@@ -288,32 +313,39 @@ function quickEval(o){const q=S.q,y=S.year;if(!o.W)return {txt:"Åbner bookingvi
   if(q.kind==="add"){const bl=blocked(y,q.to,q.k,o.W);return {txt:`${brk(q.to).navn} ${sgn(q.s)} i ${n}`,bl};}
   const b=S.bookings.get(q.id);
   if(q.kind==="swap"){const bl=blocked(y,b.breakId,q.k,o.W,b.id);return {txt:`${brk(b.breakId).navn} ${sgn(q.s-b.sek)} i ${n}`,bl};}
-  if(q.kind==="move"){const bl=blocked(y,q.to,b.kunde,o.W);return {txt:`${brk(b.breakId).navn} ${sgn(-b.sek)} · ${brk(q.to).navn} ${sgn(b.sek)} i ${n}`,bl};}
+  if(q.kind==="move"){const bl=blocked(y,q.to,b.kunde,o.W);return {txt:q.copy?`${brk(q.to).navn} ${sgn(b.sek)} i ${n} · ${brk(b.breakId).navn} uændret`:`${brk(b.breakId).navn} ${sgn(-b.sek)} · ${brk(q.to).navn} ${sgn(b.sek)} i ${n}`,bl};}
   return {txt:`${brk(b.breakId).navn} ${sgn(-b.sek)} i ${n}`,bl:[]};}
 function openQuick(q){S.q=q;S.act=null;drawQuick();}
 function drawQuick(){const root=$("#actroot");const q=S.q;if(!q){if(!S.act)root.innerHTML="";return;}
   const b=q.id?S.bookings.get(q.id):null;
-  const title=q.kind==="add"?`${esc(q.k)} (${q.s}s) ind i ${esc(brk(q.to).navn)}`:q.kind==="swap"?`${esc(b.kunde)} skiftes ud med ${esc(q.k)} (${q.s}s)`:q.kind==="move"?`Flyt ${esc(b.kunde)} fra ${esc(brk(b.breakId).navn)} til ${esc(brk(q.to).navn)}`:`Fjern ${esc(b.kunde)} fra ${esc(brk(b.breakId).navn)}`;
+  const title=q.kind==="add"?`${esc(q.k)} (${q.s}s) ind i ${esc(brk(q.to).navn)}`:q.kind==="swap"?`${esc(b.kunde)} skiftes ud med ${esc(q.k)} (${q.s}s)`:q.kind==="move"?`${q.copy?"Kopiér":"Flyt"} ${esc(b.kunde)} ${q.copy?"til":"fra "+esc(brk(b.breakId).navn)+" til"} ${esc(brk(q.to).navn)}`:`Fjern ${esc(b.kunde)} fra ${esc(brk(b.breakId).navn)}`;
   const opts=quickOpts();
   root.innerHTML=`<div class="scrim" data-a="q-close-bg"><div class="modal" role="dialog" aria-modal="true" aria-labelledby="q-t" style="width:min(560px,100%)">
     <header><h2 id="q-t" style="font-size:20px">${title}</h2><button class="btn ghost" data-a="q-close" aria-label="Luk">✕</button></header>
-    <div style="padding:14px 18px;display:flex;flex-direction:column;gap:8px"><div class="fld"><label>Hvor længe skal det gælde?</label></div>
+    <div style="padding:14px 18px;display:flex;flex-direction:column;gap:8px">${q.kind==="move"?`<div class="seg mvseg" role="group" aria-label="Flyt eller kopiér"><button class="${q.copy?"":"on"}" data-a="q-copy" data-v="0"><b>Flyt</b><span>fjernes fra ${esc(brk(b.breakId).navn)}</span></button><button class="${q.copy?"on":""}" data-a="q-copy" data-v="1"><b>Kopiér</b><span>bliver stående i begge breaks</span></button></div>`:""}<div class="fld"><label>Hvor længe skal det gælde?</label></div>
     ${opts.map((o,i)=>{const ev=quickEval(o);const dis=ev.bl.length>0;return `<button class="qopt" data-a="q-go" data-key="${o.key}" ${dis?"disabled":""}><span class="qk">${i+1}</span><span class="qb"><b>${esc(o.label)}</b><span class="${dis?"conf":"muted"}">${esc(dis?"Ikke tilladt: "+blockMsg(q.kind==="move"&&b?b.kunde:(q.k||b.kunde),q.kind==="add"||q.kind==="move"?q.to:b.breakId,ev.bl):ev.txt)}</span></span></button>`;}).join("")}
-    </div><footer><span class="note">Tast 1–${opts.length} for at vælge · Esc lukker · Ctrl+Z fortryder bagefter</span><button class="btn" data-a="q-close">Annullér</button></footer></div></div>`;
+    </div><footer><span class="note">Tast 1–${opts.length} for at vælge${q.kind==="move"?" · F flyt / K kopiér":""} · Esc lukker · Ctrl+Z fortryder bagefter</span><button class="btn" data-a="q-close">Annullér</button></footer></div></div>`;
   setTimeout(()=>{const f=root.querySelector(".qopt:not(:disabled)");if(f)f.focus();},0);}
+async function doGodk(){const me=S.meId||"";let name=me;try{if(S.user&&me){const ps=await S.user.profiles([me]);name=ps?.[me]?.name||me;}}catch(e){}
+  if(window.__gas&&__gas.st.me&&__gas.st.me.email)name=__gas.st.me.email;
+  const g={...S.godk,[S.year+"-"+S.week]:{by:name||"ukendt",at:new Date().toISOString(),sig:weekSig(S.year,S.week)}};try{await S.db.doc("status/godkendt").set({uger:g});toast(`Uge ${S.week} er godkendt`);return true;}catch(err){failWrite(err);return false;}}
+function mailAsk(w,ml,godk){const tst=window.__gas&&__gas.st.mailTest;return (godk?`Godkend uge ${w} og send mail om, at den er klar?`:`Send mail om, at reklameafviklingen for uge ${w} er klar?`)+(tst?`\n\nTESTTILSTAND: mailen sendes kun til ${tst}.`:`\n\nMailen går til alle i fanen Brugere.`)+(ml?`\n\nDer blev allerede sendt en mail for uge ${w} den ${new Date(ml.at).toLocaleString("da-DK",{dateStyle:"short",timeStyle:"short"})}.`:"");}
+async function doSendKlar(){const y=S.year,w=S.week;const its=S.cfg.breaks.flatMap(b=>activeIn(y,w,b.id));const kunder=new Set(its.map(x=>x.kunde)).size;
+  try{const r=await __gas.sendKlar({year:y,week:w,label:weekLabel(y,w),link:location.origin+location.pathname,spots:its.length,kunder});toast(r.test?`Testmail om uge ${w} er sendt til ${r.test}`:`Mail om uge ${w} er sendt til ${r.n} ${r.n===1?"person":"personer"}`);return true;}catch(err){toast("Mailen blev ikke sendt: "+(err?.message||"ukendt fejl"));return false;}}
 async function runQuick(key){const q=S.q;const o=quickOpts().find(x=>x.key===key);if(!o)return;const y=S.year;
   if(o.W&&quickEval(o).bl.length)return;
   S.q=null;drawQuick();
-  if(q.kind==="add"){if(!o.W){const src=library().find(x=>x.kunde===q.k&&+x.sek===+q.s)||{kanal:"Castory",spot:""};openModal(null);Object.assign(S.modal.d,{kunde:q.k,sek:+q.s,kanal:src.kanal,spot:src.spot||"",uger:[S.week]});S.modal.breaks=new Set([q.to]);drawModal();return;}
-    const ex=all().find(x=>x.year===y&&x.breakId===q.to&&x.kunde===q.k&&+x.sek===+q.s&&live(x));
+  if(q.kind==="add"){if(!o.W){const src=libFind(q.k,q.sp,q.s);openModal(null);Object.assign(S.modal.d,{kunde:q.k,sek:+q.s,kanal:src.kanal,spot:q.sp||"",uger:[S.week]});S.modal.breaks=new Set([q.to]);drawModal();return;}
+    const ex=all().find(x=>x.year===y&&x.breakId===q.to&&sameSpot(x,q.k,q.sp,q.s)&&live(x));
     if(ex)await setWeeks(ex.id,[...ex.uger,...o.W],true);
-    else{const src=library().find(x=>x.kunde===q.k&&+x.sek===+q.s)||{kanal:"Castory",spot:""};await writeDoc(S.db.collection("bookings").doc().id,clean({year:y,breakId:q.to,kunde:q.k,kanal:src.kanal,spot:src.spot||"",sek:+q.s,pos:null,uger:o.W,status:"Bekræftet",note:"",ordrenr:""}));}
+    else{const src=libFind(q.k,q.sp,q.s);await writeDoc(S.db.collection("bookings").doc().id,clean({year:y,breakId:q.to,kunde:q.k,kanal:src.kanal,spot:q.sp||"",sek:+q.s,pos:null,uger:o.W,status:"Bekræftet",note:"",ordrenr:""}));}
     toast(`${q.k} lagt i ${brk(q.to).navn}: +${q.s}s i uge ${ranges(o.W)}`);return;}
   const b=S.bookings.get(q.id);if(!b)return;
-  if(q.kind==="swap"||q.kind==="rm"){S.act={kind:q.kind==="swap"?"swap":"rm",id:b.id,scope:key,kunde:q.k||"",sek:q.s||"",kanal:(library().find(x=>x.kunde===q.k&&+x.sek===+q.s)||{}).kanal||b.kanal};await doAct();return;}
+  if(q.kind==="swap"||q.kind==="rm"){S.act={kind:q.kind==="swap"?"swap":"rm",id:b.id,scope:key,kunde:q.k||"",sek:q.s||"",spot:q.sp,kanal:(q.k?libFind(q.k,q.sp,q.s).kanal:null)||b.kanal};await doAct();return;}
   if(q.kind==="move"){const W=o.W;const rest=b.uger.filter(w=>!W.includes(w));
-    const ex=all().find(x=>x.year===y&&x.breakId===q.to&&x.kunde===b.kunde&&+x.sek===+b.sek&&live(x));
+    const ex=all().find(x=>x.year===y&&x.breakId===q.to&&sameSpot(x,b.kunde,b.spot,b.sek)&&live(x));
     if(ex)await setWeeks(ex.id,[...ex.uger,...W],true);else await writeDoc(S.db.collection("bookings").doc().id,clean({...b,breakId:q.to,pos:null,uger:W}));
+    if(q.copy){toast(`${b.kunde} kopieret til ${brk(q.to).navn} i uge ${ranges(W)}. Står stadig i ${brk(b.breakId).navn}`);return;}
     if(rest.length)await setWeeks(b.id,rest,true);else await dbDel(b.id);
     toast(`${b.kunde} flyttet fra ${brk(b.breakId).navn} til ${brk(q.to).navn} i uge ${ranges(W)}`);}}
 async function reorderTo(srcId,breakId,beforeId){const items=activeIn(S.year,S.week,breakId).sort(sortPos);const src=items.find(x=>x.id===srcId);if(!src)return;
@@ -336,7 +368,7 @@ async function undo(){const tx=S.undo.pop();if(!tx){toast("Intet at fortryde");r
 
 // ---------- Træk og slip i ugeplanen ----------
 document.addEventListener("dragstart",e=>{const t=e.target;if(!t.closest)return;const c=t.closest(".dchip");const li=t.closest("li[data-sid]");
-  if(c){S.drag={src:"lib",k:c.dataset.k,s:+c.dataset.s};}
+  if(c){S.drag={src:"lib",k:c.dataset.k,s:+c.dataset.s,sp:c.dataset.sp||""};}
   else if(li){S.drag={src:"spot",id:li.dataset.sid,bk:li.dataset.bk};e.dataTransfer.setData("text/plain",JSON.stringify({id:li.dataset.sid}));e.dataTransfer.effectAllowed="move";li.classList.add("dragging");const tr=$("#trash");if(tr)tr.hidden=false;}});
 function clearDz(){document.querySelectorAll(".dz-card,.dz-swap,.dz-before,.trash.on").forEach(x=>x.classList.remove("dz-card","dz-swap","dz-before","on"));}
 function ugTarget(e){const t=e.target;if(!t.closest)return null;const tr=t.closest("#trash");if(tr)return {kind:"trash",el:tr};
@@ -345,10 +377,10 @@ document.addEventListener("dragover",e=>{if(!S.drag||S.view!=="ugeplan")return;c
   if(T.kind==="trash")T.el.classList.add("on");else if(T.kind==="li"){if(S.drag.src==="lib")T.el.classList.add("dz-swap");else if(T.id!==S.drag.id)T.el.classList.add(T.bk===S.drag.bk?"dz-before":"dz-swap");}else T.el.classList.add("dz-card");});
 document.addEventListener("drop",async e=>{if(!S.drag||S.view!=="ugeplan")return;const T=ugTarget(e);const D=S.drag;S.drag=null;clearDz();const tr=$("#trash");if(tr)tr.hidden=true;if(!T)return;e.preventDefault();
   if(S.canWrite===false)return;
-  if(D.src==="lib"){if(T.kind==="li"){openQuick({kind:"swap",id:T.id,k:D.k,s:D.s});}else if(T.kind==="card"){openQuick({kind:"add",to:T.bk,k:D.k,s:D.s});}return;}
+  if(D.src==="lib"){if(T.kind==="li"){openQuick({kind:"swap",id:T.id,k:D.k,s:D.s,sp:D.sp});}else if(T.kind==="card"){openQuick({kind:"add",to:T.bk,k:D.k,s:D.s,sp:D.sp});}return;}
   if(T.kind==="trash"){openQuick({kind:"rm",id:D.id});return;}
-  if(T.kind==="li"){if(T.id===D.id)return;if(T.bk===D.bk)await txRun(()=>reorderTo(D.id,T.bk,T.id));else openQuick({kind:"move",id:D.id,to:T.bk});return;}
-  if(T.kind==="card"){if(T.bk===D.bk)await txRun(()=>reorderTo(D.id,T.bk,null));else openQuick({kind:"move",id:D.id,to:T.bk});}});
+  if(T.kind==="li"){if(T.id===D.id)return;if(T.bk===D.bk)await txRun(()=>reorderTo(D.id,T.bk,T.id));else openQuick({kind:"move",id:D.id,to:T.bk,copy:!!(e.ctrlKey||e.altKey||e.metaKey)||!!S.moveCopy});return;}
+  if(T.kind==="card"){if(T.bk===D.bk)await txRun(()=>reorderTo(D.id,T.bk,null));else openQuick({kind:"move",id:D.id,to:T.bk,copy:!!(e.ctrlKey||e.altKey||e.metaKey)||!!S.moveCopy});}});
 document.addEventListener("dragend",()=>{S.drag=null;clearDz();document.querySelectorAll(".dragging").forEach(x=>x.classList.remove("dragging"));const tr=$("#trash");if(tr)tr.hidden=true;});
 
 // --- Dashboard
@@ -491,11 +523,11 @@ function vOverview(y,w){
 
 
 // --- Krydsrapport (pivot)
-const DIMS={kunde:"Kunde",kanal:"Salgskanal",branche:"Branche",type:"Breaktype",brk:"Break",kvartal:"Kvartal",maaned:"Måned",uge:"Uge",status:"Status"};
+const DIMS={kunde:"Kunde",spot:"Spot",kanal:"Salgskanal",branche:"Branche",type:"Breaktype",brk:"Break",kvartal:"Kvartal",maaned:"Måned",uge:"Uge",status:"Status"};
 const MEAS={visn:"Visninger",sek:"Sendetid",bookinger:"Bookinger",kunder:"Kunder"};
 const PRESETS=[["Kunde × måned","kunde","maaned","sek"],["Salgskanal × kvartal","kanal","kvartal","sek"],["Branche × breaktype","branche","type","visn"],["Break × uge","brk","uge","sek"],["Kunde × break","kunde","brk","visn"],["Salgskanal × måned","kanal","maaned","kunder"]];
 function weekMonth(y,w){const t=weekMon(y,w);t.setUTCDate(t.getUTCDate()+3);return t.getUTCMonth();}
-function dimVal(dim,b,w,y){switch(dim){case "kunde":return b.kunde;case "kanal":return b.kanal;case "branche":return kat(b.kunde)||"Ingen branche";case "type":return brk(b.breakId).type;case "brk":return brk(b.breakId).navn;
+function dimVal(dim,b,w,y){switch(dim){case "kunde":return b.kunde;case "spot":return b.kunde+" · "+(b.spot||"uden navn")+" · "+b.sek+"s";case "kanal":return b.kanal;case "branche":return kat(b.kunde)||"Ingen branche";case "type":return brk(b.breakId).type;case "brk":return brk(b.breakId).navn;
   case "kvartal":return "Q"+(Math.floor(weekMonth(y,w)/3)+1);case "maaned":return MDR[weekMonth(y,w)];case "uge":return w;case "status":return b.status;}}
 function dimOrder(dim){if(dim==="maaned")return k=>MDR.indexOf(k);if(dim==="uge")return k=>+k;if(dim==="kvartal")return k=>+String(k).slice(1);if(dim==="brk")return k=>S.cfg.breaks.findIndex(b=>b.navn===k);if(dim==="type")return k=>TYPES.indexOf(k);if(dim==="kanal")return k=>KANALER.indexOf(k);return null;}
 function pivot(f,rd,cd,ms){const dage=S.cfg.dagePrUge||7;const cells=new Map(),rT=new Map(),cT=new Map();const tot={v:0,set:new Set()};
@@ -734,6 +766,12 @@ function vIndst(){
     <div class="fld" style="flex:1"><label for="rntil">Nyt navn</label><input id="rntil" type="text" list="kl"></div></div>
     <datalist id="kl">${kunder().map(k=>`<option value="${esc(k)}">`).join("")}</datalist>
     <div class="row" style="margin-top:10px"><button class="btn" data-a="rename">Omdøb</button></div>
+  </div>
+  <div class="card pad"><h3>Navngiv eller omdøb spot</h3>
+    <p class="note">Et spot er kunde + spotnavn + længde. Navnet skifter på alle bookinger med det spot, i alle år.</p>
+    <div class="row" style="margin-top:8px"><div class="fld" style="flex:1"><label for="rsfra">Spot</label><select id="rsfra">${library().filter(x=>all().some(b=>sameSpot(b,x.kunde,x.spot,x.sek))).map(x=>`<option value="${esc(JSON.stringify([x.kunde,x.spot||"",+x.sek]))}">${esc(x.kunde)} · ${esc(x.spot||"(uden navn)")} · ${x.sek}s</option>`).join("")}</select></div>
+    <div class="fld" style="flex:1"><label for="rstil">Nyt spotnavn</label><input id="rstil" type="text" maxlength="80" placeholder="fx R018 Julekampagne"></div></div>
+    <div class="row" style="margin-top:10px"><button class="btn" data-a="rename-spot">Gem spotnavn</button></div>
   </div></div>`:""}`;
 }
 
@@ -823,6 +861,7 @@ function drawAct(){const a=S.act;const root=$("#actroot");if(!a){root.innerHTML=
     <div style="padding:16px 18px;display:flex;flex-direction:column;gap:14px">
       <div class="row"><span class="sw" style="background:var(${KVAR[b.kanal]||"--k-eg"})"></span><b>${esc(b.kunde)}</b><span class="muted">${b.sek} sek · uge ${esc(ranges(b.uger))}</span></div>
       ${swap?`<div class="row" style="align-items:end"><div class="fld" style="flex:1"><label for="a-k">Ny kunde</label><input id="a-k" type="text" list="a-kl" value="${esc(a.kunde)}" autocomplete="off"><datalist id="a-kl">${[...new Set(lib.map(x=>x.kunde))].map(k=>`<option value="${esc(k)}">`).join("")}</datalist></div>
+        <div class="fld" style="flex:1"><label for="a-sp">Spot</label><input id="a-sp" type="text" list="a-spl" value="${esc(a.spot||"")}" placeholder="Spotnavn" autocomplete="off"><datalist id="a-spl">${spotOpts(a.kunde)}</datalist></div>
         <div class="fld"><label for="a-s">Sek</label><input id="a-s" type="number" min="1" value="${esc(a.sek)}" style="width:76px"></div>
         <div class="fld"><label for="a-ka">Kanal</label><select id="a-ka">${kanalerFor(S.year).map(k=>`<option ${k===kanalFor(S.year,a.kanal)?"selected":""}>${k}</option>`).join("")}</select></div></div>`:""}
       <div class="fld"><label>Gælder</label><div class="radio">${scopes.map(([k,l])=>`<label><input type="radio" name="a-sc" value="${k}" ${a.scope===k?"checked":""}> ${l}</label>`).join("")}</div></div>
@@ -833,19 +872,20 @@ function drawAct(){const a=S.act;const root=$("#actroot");if(!a){root.innerHTML=
 async function doAct(){const a=S.act,b=S.bookings.get(a.id);if(!b)return;const W=actWeeks();if(!W.length)return;
   const rest=b.uger.filter(w=>!W.includes(w));
   if(a.kind==="swap"){const k=a.kunde.trim(),sk=+a.sek;if(!k||!sk)return;if(blocked(b.year,b.breakId,k,W,b.id).length)return;
-    const ex=all().find(x=>x.year===b.year&&x.breakId===b.breakId&&x.kunde===k&&+x.sek===sk&&live(x)&&x.id!==b.id);
-    const src=library().find(x=>x.kunde===k&&+x.sek===sk);
+    const src=libFind(k,a.spot,sk),nsp=a.spot!==undefined?(a.spot||""):(src.spot||"");
+    const ex=all().find(x=>x.year===b.year&&x.breakId===b.breakId&&sameSpot(x,k,nsp,sk)&&live(x)&&x.id!==b.id);
     if(ex){await setWeeks(ex.id,[...ex.uger,...W],true);}
-    else{const nid=S.db.collection("bookings").doc().id;await writeDoc(nid,clean({year:b.year,breakId:b.breakId,kunde:k,kanal:a.kanal,spot:src?.spot||"",sek:sk,pos:b.pos??null,uger:W,status:"Bekræftet",note:"",ordrenr:""}));}
+    else{const nid=S.db.collection("bookings").doc().id;await writeDoc(nid,clean({year:b.year,breakId:b.breakId,kunde:k,kanal:a.kanal,spot:nsp,sek:sk,pos:b.pos??null,uger:W,status:"Bekræftet",note:"",ordrenr:""}));}
     if(rest.length)await setWeeks(b.id,rest,true);else{await dbDel(b.id);}
     const d=sk-b.sek;toast(`${b.kunde} → ${k} i ${brk(b.breakId).navn}: ${d>0?"+":d<0?"−":"±"}${Math.abs(d)}s i uge ${ranges(W)}`);}
   else{if(rest.length)await setWeeks(b.id,rest,true);else{await dbDel(b.id);}
     toast(`${b.kunde} fjernet fra ${brk(b.breakId).navn}: −${b.sek}s i uge ${ranges(W)}`);}
   S.act=null;drawAct();}
 document.addEventListener("change",e=>{if(!S.act)return;const el=e.target;if(el.name==="a-sc"){S.act.scope=el.value;}else if(el.id==="a-ka"){S.act.kanal=el.value;}
-  else if(el.id==="a-k"){S.act.kunde=el.value.trim();const v=library().filter(x=>x.kunde===S.act.kunde);if(v.length){S.act.sek=v[v.length-1].sek;S.act.kanal=v[v.length-1].kanal;const sn=$("#a-s"),kn=$("#a-ka");if(sn)sn.value=S.act.sek;if(kn)kn.value=S.act.kanal;}}
+  else if(el.id==="a-k"){S.act.kunde=el.value.trim();const v=library().filter(x=>x.kunde===S.act.kunde);const dl=$("#a-spl");if(dl)dl.innerHTML=spotOpts(S.act.kunde);if(v.length){const f=v.find(x=>x.spot)||v[0];S.act.sek=f.sek;S.act.kanal=f.kanal;S.act.spot=f.spot||"";const sn=$("#a-s"),kn=$("#a-ka"),spn=$("#a-sp");if(sn)sn.value=S.act.sek;if(kn)kn.value=S.act.kanal;if(spn)spn.value=S.act.spot;}}
+  else if(el.id==="a-sp"){S.act.spot=el.value.trim();const f=library().find(x=>x.kunde===S.act.kunde&&(x.spot||"")===S.act.spot);if(f){S.act.sek=f.sek;const sn=$("#a-s");if(sn)sn.value=f.sek;}}
   else if(el.id==="a-s"){S.act.sek=el.value;}else return;updAct();});
-document.addEventListener("input",e=>{if(!S.act)return;const el=e.target;if(el.id==="a-s"){S.act.sek=el.value;updAct();}else if(el.id==="a-k"){S.act.kunde=el.value.trim();updAct();}});
+document.addEventListener("input",e=>{if(!S.act)return;const el=e.target;if(el.id==="a-sp"){S.act.spot=el.value.trim();return;}if(el.id==="a-s"){S.act.sek=el.value;updAct();}else if(el.id==="a-k"){S.act.kunde=el.value.trim();updAct();}});
 
 // ---------- Skrivninger ----------
 function clean(d){return {year:d.year,breakId:d.breakId,kunde:d.kunde,kanal:kanalFor(d.year,d.kanal),spot:d.spot||"",sek:+d.sek||0,pos:d.pos??null,uger:[...new Set(d.uger)].sort((a,b)=>a-b),status:d.status,note:d.note||"",ordrenr:d.ordrenr||"",updatedAt:new Date().toISOString(),updatedBy:S.meId||null};}
@@ -871,9 +911,9 @@ async function move(breakId,id,dir){
 
 // ---------- Eksport ----------
 function weekRows(){const y=S.year,w=S.week;const out=[];for(const t of TYPES){for(const b of S.cfg.breaks.filter(x=>x.type===t)){const items=activeIn(y,w,b.id).sort(sortPos);
-  items.forEach((x,i)=>out.push({Break:b.navn,Placering:i+1,Kunde:x.kunde,"Spot/filnavn":x.spot,Sek:x.sek,Kanal:x.kanal,Status:x.status,Note:x.note}));
-  if(items.length&&b.bumper)out.push({Break:b.navn,Placering:"",Kunde:"Breaker ind/ud",Sek:b.bumper});
-  if(items.length){const L=breakLen(y,w,b.id);if(t==="Sponsorbreak")out.push({Break:b.navn,Placering:"",Kunde:"Total antal sekunder",Sek:L});else{out.push({Break:b.navn,Placering:"",Kunde:"Total antal sek.",Sek:L});out.push({Break:b.navn,Placering:"",Kunde:"Total antal min.",Sek:fmtDur(L)});}}}
+  items.forEach((x,i)=>out.push({Break:b.navn,Rækkefølge:i+1,Kunde:x.kunde,"Spot/filnavn":x.spot,Sek:x.sek,Kanal:x.kanal,Status:x.status,Note:x.note}));
+  if(items.length&&b.bumper)out.push({Break:b.navn,Rækkefølge:"",Kunde:"Breaker ind/ud",Sek:b.bumper});
+  if(items.length){const L=breakLen(y,w,b.id);if(t==="Sponsorbreak")out.push({Break:b.navn,Rækkefølge:"",Kunde:"Total antal sekunder",Sek:L});else{out.push({Break:b.navn,Rækkefølge:"",Kunde:"Total antal sek.",Sek:L});out.push({Break:b.navn,Rækkefølge:"",Kunde:"Total antal min.",Sek:fmtDur(L)});}}}
   if(t!=="Sponsorbreak"){const a=Math.round(groupAvg(y,w,t)),buf=(S.cfg.breaks.find(x=>x.type===t)||{}).buffer||0;out.push({Break:t+"s",Kunde:"Gennemsnit alle breaks i sek.",Sek:a});out.push({Break:t+"s",Kunde:"Gennemsnit alle breaks i min.",Sek:fmtDur(a)});out.push({Break:t+"s",Kunde:"Placeholder tid i MediaTool",Sek:fmtDur(a+buf),Note:"snit + "+buf+" sek"});}out.push({});}
   return out;}
 async function saveXlsx(name,sheets){
@@ -908,7 +948,7 @@ document.addEventListener("click",async e=>{
     case "pwin":S.pwin=t.dataset.k;render();break;
     case "pweek":S.week=+t.dataset.w;render();break;
     case "pcol":{const id=t.dataset.b;S.collapsed.has(id)?S.collapsed.delete(id):S.collapsed.add(id);render();break;}
-    case "nl-add":{const k=$("#nl-k").value.trim(),sk=parseInt($("#nl-s").value,10);if(!k||!sk){toast("Angiv kunde og sekunder");break;}S.lib.push({kunde:k,sek:sk,kanal:$("#nl-ka").value,spot:""});S.pq=k;render();toast("Træk "+k+" ind i en uge");break;}
+    case "nl-add":{const k=$("#nl-k").value.trim(),sp=$("#nl-sp").value.trim(),sk=parseInt($("#nl-s").value,10);if(!k||!sp||!sk){toast("Angiv kunde, spotnavn og sekunder");break;}if(library().some(x=>sameSpot(x,k,sp,sk))){toast("Det spot findes allerede");S.pq=sp;render();break;}S.lib.push({kunde:k,sek:sk,kanal:$("#nl-ka").value,spot:sp});S.pq=k;render();toast("Træk "+k+" ind i en uge");break;}
     case "new":openModal(null);break;
     case "edit":openModal(t.dataset.id);break;
     case "close":case "close-bg":S.modal=null;drawModal();break;
@@ -920,7 +960,7 @@ document.addEventListener("click",async e=>{
     case "wk-nextnow":[S.year,S.week]=shiftWeek(TODAY[0],TODAY[1],1);render();break;
     case "hist":{const pop=$("#histpop");pop.hidden=!pop.hidden;$("#histbtn").setAttribute("aria-expanded",String(!pop.hidden));drawHist();break;}
     case "tip-ok":try{localStorage.setItem("sl-tip-ug","1");}catch(e){}render();break;
-    case "godk":{const me=S.meId||"";let name=me;try{if(S.user&&me){const ps=await S.user.profiles([me]);name=ps?.[me]?.name||me;}}catch(e){}const g={...S.godk,[S.year+"-"+S.week]:{by:name||"ukendt",at:new Date().toISOString(),sig:weekSig(S.year,S.week)}};try{await S.db.doc("status/godkendt").set({uger:g});toast(`Uge ${S.week} er godkendt`);}catch(err){failWrite(err);}break;}
+    case "godk":await doGodk();break;
     case "ugodk":{const g={...S.godk};delete g[S.year+"-"+S.week];try{await S.db.doc("status/godkendt").set({uger:g});toast(`Godkendelsen af uge ${S.week} er fjernet`);}catch(err){failWrite(err);}break;}
     case "live":S.liveOn=!S.liveOn;try{localStorage.setItem("sl-live",S.liveOn?"1":"");}catch(e){}drawLive();break;
     case "pm-open":{const w=window.open(t.href,"sl-live","popup=yes,width=720,height=460");if(!w)window.open(t.href,"_blank","noopener");break;}
@@ -958,6 +998,8 @@ document.addEventListener("click",async e=>{
     case "save-cfg":{const bs=S.cfg.breaks.map(b=>({...b}));document.querySelectorAll("[data-c]").forEach(el=>{const b=bs[+el.dataset.c];const k=el.dataset.k;b[k]=k==="snit"?el.checked:k==="navn"?el.value.trim()||b.navn:Math.max(0,+el.value||0);});
       const dpu=Math.min(7,Math.max(1,+$("#dpu").value||7));const lu=($("#liveurl")?.value||"").trim();if(lu&&!/^https:\/\//.test(lu)){toast("Live-adressen skal starte med https://");break;}try{await S.db.doc("config/main").set({breaks:bs,dagePrUge:dpu,liveUrl:lu,updatedAt:new Date().toISOString()});toast("Breaks gemt");}catch(err){failWrite(err);}break;}
     case "pyear":setPlanYear(+t.dataset.y);S.planYear=S.year;render();break;
+    case "sendklar":{if(!(window.__gas&&__gas.sendKlar))break;const ml=(__gas.st.mails||{})[`${S.year}-${String(S.week).padStart(2,"0")}`];if(!confirm(mailAsk(S.week,ml,false)))break;t.disabled=true;t.textContent="Sender …";await doSendKlar();render();break;}
+    case "godk-mail":{if(!confirm(mailAsk(S.week,null,true)))break;t.disabled=true;t.textContent="Godkender og sender …";if(await doGodk())await doSendKlar();render();break;}
     case "theme":{const light=document.documentElement.dataset.theme!=="light";if(light)document.documentElement.dataset.theme="light";else delete document.documentElement.dataset.theme;try{localStorage.setItem("sl-theme",light?"light":"dark");}catch(e){}const b=$("#thbtn");if(b)b.textContent=light?"☾":"☀︎";render();break;}
     case "add-brk":{if(S.isOwner===false){toast("Kun ejeren kan oprette breaks");break;}const tp=t.dataset.t;const same=S.cfg.breaks.filter(b=>b.type===tp);const src=same[0]||{perDag:4,bumper:0,buffer:0,maks:0};
       let n=1;const ids=new Set(S.cfg.breaks.map(b=>b.id));while(ids.has("X"+TPRE[tp]+n))n++;
@@ -982,6 +1024,12 @@ document.addEventListener("click",async e=>{
     case "kat-addcat":{const c=$("#kc-new").value.trim();if(!c||S.katDraft.kategorier.includes(c))break;S.katDraft.kategorier.push(c);render();break;}
     case "kat-save":{const cs=allConflicts(S.katDraft);if(cs.length){toast("Kan ikke gemmes, for det ville bryde reglerne for eksisterende bookinger: "+confSummary(cs)+". Flyt bookingerne først.");break;}}
     try{await S.db.doc("config/kategorier").set({...S.katDraft,updatedAt:new Date().toISOString()});S.katDraft=null;toast("Brancher og regler gemt");}catch(err){failWrite(err);}break;
+    case "name-spot":{const b=S.bookings.get(t.dataset.id);if(!b)break;const nm=(prompt(`Spotnavn for ${b.kunde} (${b.sek} sek):`,"")||"").trim();if(!nm)break;
+      const same=all().filter(x=>x.kunde===b.kunde&&+x.sek===+b.sek&&!(x.spot||""));
+      const ids=same.length>1&&confirm(`Der er ${same.length} bookinger med ${b.kunde} · ${b.sek} sek uden spotnavn. Skal de alle hedde "${nm}"?\n\nOK = alle, Annuller = kun denne`)?same.map(x=>x.id):[b.id];
+      await txRun(async()=>{for(const id of ids)await dbUpdate(id,{spot:nm});},"Spotnavn");toast(`${ids.length} booking${ids.length===1?"":"er"} har fået spotnavnet "${nm}"`);break;}
+    case "rename-spot":{const v=$("#rsfra").value;if(!v)break;const [k,sp,sk]=JSON.parse(v);const til=$("#rstil").value.trim();if(!til||til===sp){toast("Skriv det nye spotnavn");break;}
+      const bs=all().filter(x=>sameSpot(x,k,sp,sk));t.disabled=true;await txRun(async()=>{for(const b of bs)await dbUpdate(b.id,{spot:til});},"Omdøb spot");toast(`${bs.length} booking${bs.length===1?"":"er"} omdøbt til "${til}"`);break;}
     case "rename":{const fra=$("#rnfra").value,til=$("#rntil").value.trim();if(!til||til===fra){toast("Skriv det nye navn");break;}
       {const k2=JSON.parse(JSON.stringify(S.kat));if(k2.kunder[fra]&&!k2.kunder[til])k2.kunder[til]=k2.kunder[fra];const saved=S.kat;S.kat=k2;const bad=[];for(const b of all().filter(x=>x.kunde===fra&&live(x))){const bl=blocked(b.year,b.breakId,til,b.uger,b.id);if(bl.length)bad.push(blockMsg(til,b.breakId,bl));}S.kat=saved;if(bad.length){toast("Ikke tilladt: "+bad[0]);break;}}
       t.disabled=true;let n=0;for(const b of all().filter(x=>x.kunde===fra)){await dbUpdate(b.id,{kunde:til});n++;}
@@ -996,7 +1044,7 @@ document.addEventListener("change",e=>{const el=e.target;if(!S.katDraft)return;i
   else if(el.dataset.kx!==undefined){const c=el.dataset.kx;const s2=new Set(S.katDraft.eksklusiv||[]);el.checked?s2.add(c):s2.delete(c);S.katDraft.eksklusiv=[...s2];}});
 document.addEventListener("change",e=>{const el=e.target;if(el.dataset.pv){S.pv[el.dataset.pv]=el.value;render();}});
 document.addEventListener("submit",e=>{e.preventDefault();});
-document.addEventListener("keydown",e=>{if(S.q){if(e.key==="Escape"){S.q=null;drawQuick();return;}const n=parseInt(e.key,10);if(n>=1&&n<=3){const o=quickOpts()[n-1];if(o){const btn=document.querySelector(`.qopt[data-key="${o.key}"]`);if(btn&&!btn.disabled){e.preventDefault();txRun(()=>runQuick(o.key));}}return;}}
+document.addEventListener("keydown",e=>{if(S.q){if(e.key==="Escape"){S.q=null;drawQuick();return;}if(S.q.kind==="move"&&/^[fk]$/i.test(e.key)){S.q.copy=e.key.toLowerCase()==="k";S.moveCopy=S.q.copy;drawQuick();e.preventDefault();return;}const n=parseInt(e.key,10);if(n>=1&&n<=3){const o=quickOpts()[n-1];if(o){const btn=document.querySelector(`.qopt[data-key="${o.key}"]`);if(btn&&!btn.disabled){e.preventDefault();txRun(()=>runQuick(o.key));}}return;}}
   if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==="z"&&!e.shiftKey&&!/INPUT|TEXTAREA|SELECT/.test(document.activeElement?.tagName||"")&&!S.modal&&!S.act){e.preventDefault();undo();return;}
   if(e.key==="Escape"&&S.act){S.act=null;drawAct();return;}if(e.key==="Escape"&&S.modal){S.modal=null;drawModal();}});
 let rT;window.addEventListener("resize",()=>{clearTimeout(rT);rT=setTimeout(()=>{if(S.view==="rapporter")afterReport();if(S.view==="dashboard")drawYear();},150);});
@@ -1022,12 +1070,12 @@ function liveLen(td,w){if(!S.paint)return;const id=S.paint.id;const b=S.bookings
   const cell=td.closest("table").querySelector(`td[data-lw="${w}"]`);if(cell)cell.innerHTML=(L?fmtDur(L):"–")+deltaHtml(L-baseLen(S.year,w,b.breakId));}
 async function endPaint(){if(!S.paint)return;const p=S.paint;S.paint=null;await txRun(()=>setWeeks(p.id,[...p.set]));if(S.dirty){S.dirty=false;render();}}
 document.addEventListener("pointerup",endPaint);document.addEventListener("pointercancel",endPaint);
-document.addEventListener("dragstart",e=>{const c=e.target.closest&&e.target.closest(".dchip");if(!c)return;e.dataTransfer.setData("text/plain",JSON.stringify({k:c.dataset.k,s:+c.dataset.s}));e.dataTransfer.effectAllowed="copy";});
+document.addEventListener("dragstart",e=>{const c=e.target.closest&&e.target.closest(".dchip");if(!c)return;e.dataTransfer.setData("text/plain",JSON.stringify({k:c.dataset.k,s:+c.dataset.s,sp:c.dataset.sp||""}));e.dataTransfer.effectAllowed="copy";});
 document.addEventListener("dragover",e=>{const td=e.target.closest&&e.target.closest("td.c[data-b]");if(!td)return;e.preventDefault();e.dataTransfer.dropEffect="copy";
   document.querySelectorAll("td.dz").forEach(x=>x!==td&&x.classList.remove("dz"));td.classList.add("dz");});
 document.addEventListener("dragleave",e=>{const td=e.target.closest&&e.target.closest("td.c[data-b]");if(td)td.classList.remove("dz");});
 document.addEventListener("drop",async e=>{const td=e.target.closest&&e.target.closest("td.c[data-b]");if(!td)return;e.preventDefault();td.classList.remove("dz");
-  let d;try{d=JSON.parse(e.dataTransfer.getData("text/plain"));}catch{return;}if(!d||!d.k)return;S.drag=null;await txRun(()=>dropLib(d.k,d.s,td.dataset.b,+td.dataset.w));});
+  let d;try{d=JSON.parse(e.dataTransfer.getData("text/plain"));}catch{return;}if(!d||!d.k)return;S.drag=null;await txRun(()=>dropLib(d.k,d.s,td.dataset.b,+td.dataset.w,d.sp||""));});
 document.addEventListener("dragend",()=>document.querySelectorAll("td.dz").forEach(x=>x.classList.remove("dz")));
 // ---------- Opstart ----------
 [S.year,S.week]=TODAY;

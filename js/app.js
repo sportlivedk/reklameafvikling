@@ -331,7 +331,7 @@ async function doGodk(){const me=S.meId||"";let name=me;try{if(S.user&&me){const
   const g={...S.godk,[S.year+"-"+S.week]:{by:name||"ukendt",at:new Date().toISOString(),sig:weekSig(S.year,S.week)}};try{await S.db.doc("status/godkendt").set({uger:g});toast(`Uge ${S.week} er godkendt`);return true;}catch(err){failWrite(err);return false;}}
 function mailAsk(w,ml,godk){const tst=window.__gas&&__gas.st.mailTest;return (godk?`Godkend uge ${w} og send mail om, at den er klar?`:`Send mail om, at reklameafviklingen for uge ${w} er klar?`)+(tst?`\n\nTESTTILSTAND: mailen sendes kun til ${tst}.`:`\n\nMailen går til alle i fanen Brugere.`)+(ml?`\n\nDer blev allerede sendt en mail for uge ${w} den ${new Date(ml.at).toLocaleString("da-DK",{dateStyle:"short",timeStyle:"short"})}.`:"");}
 async function doSendKlar(){const y=S.year,w=S.week;const its=S.cfg.breaks.flatMap(b=>activeIn(y,w,b.id));const kunder=new Set(its.map(x=>x.kunde)).size;
-  try{const r=await __gas.sendKlar({year:y,week:w,label:weekLabel(y,w),link:location.origin+location.pathname,spots:its.length,kunder});toast(r.test?`Testmail om uge ${w} er sendt til ${r.test}`:`Mail om uge ${w} er sendt til ${r.n} ${r.n===1?"person":"personer"}`);return true;}catch(err){toast("Mailen blev ikke sendt: "+(err?.message||"ukendt fejl"));return false;}}
+  try{const r=await __gas.sendKlar({year:y,week:w,label:weekLabel(y,w),link:location.origin+location.pathname,spots:its.length,kunder});toast(r.test?`Testmail om uge ${w} er sendt til ${r.test}`:`Mail om uge ${w} er sendt til ${r.n} ${r.n===1?"person":"personer"}`);return true;}catch(err){errBox("Mailen blev ikke sendt",err?.message||"Ukendt fejl.");return false;}}
 async function runQuick(key){const q=S.q;const o=quickOpts().find(x=>x.key===key);if(!o)return;const y=S.year;
   if(o.W&&quickEval(o).bl.length)return;
   S.q=null;drawQuick();
@@ -890,7 +890,12 @@ document.addEventListener("input",e=>{if(!S.act)return;const el=e.target;if(el.i
 // ---------- Skrivninger ----------
 function clean(d){return {year:d.year,breakId:d.breakId,kunde:d.kunde,kanal:kanalFor(d.year,d.kanal),spot:d.spot||"",sek:+d.sek||0,pos:d.pos??null,uger:[...new Set(d.uger)].sort((a,b)=>a-b),status:d.status,note:d.note||"",ordrenr:d.ordrenr||"",updatedAt:new Date().toISOString(),updatedBy:S.meId||null};}
 async function writeDoc(id,data){try{await dbSet(id,data);return true;}catch(e){failWrite(e);return false;}}
-function failWrite(e){if(e?.code==="invalid_argument"&&S.canWrite===null){S.canWrite=false;render();}toast(e?.message?("Kunne ikke gemme: "+e.message):"Kunne ikke gemme. Prøv igen.");}
+function failWrite(e){if(e?.code==="invalid_argument"&&S.canWrite===null&&!window.__gas){S.canWrite=false;render();}
+  errBox("Det blev ikke gemt",e?.code==="quota_exceeded"?"Databasen er fuld. Slet gamle bookinger.":(e?.message||"Ukendt fejl. Prøv igen."));}
+// Fejlbesked, der bliver stående, til man klikker OK
+function errBox(title,msg){let el=document.getElementById("errbox");if(!el){el=document.createElement("div");el.id="errbox";document.body.appendChild(el);}
+  el.innerHTML=`<div class="scrim" style="z-index:90"><div class="modal" role="alertdialog" aria-modal="true" aria-labelledby="eb-t" style="width:min(480px,100%)"><header style="padding:14px 18px;border-bottom:1px solid var(--line)"><h3 id="eb-t" style="margin:0;color:var(--bad)">⚠ ${esc(title)}</h3></header><div style="padding:16px 18px;font-size:14px;line-height:1.5">${esc(msg)}</div><footer style="padding:12px 18px;border-top:1px solid var(--line);display:flex;justify-content:flex-end"><button class="btn pri" id="eb-ok">OK</button></footer></div></div>`;
+  const ok=el.querySelector("#eb-ok");ok.onclick=()=>{el.innerHTML="";};ok.focus();}
 async function saveModal(){
   readForm();const M=S.modal,d=M.d;
   if(!d.kunde){toast("Angiv kunde");$("#m-kunde").focus();return;}
@@ -1000,6 +1005,7 @@ document.addEventListener("click",async e=>{
     case "pyear":setPlanYear(+t.dataset.y);S.planYear=S.year;render();break;
     case "sendklar":{if(!(window.__gas&&__gas.sendKlar))break;const ml=(__gas.st.mails||{})[`${S.year}-${String(S.week).padStart(2,"0")}`];if(!confirm(mailAsk(S.week,ml,false)))break;t.disabled=true;t.textContent="Sender …";await doSendKlar();render();break;}
     case "godk-mail":{if(!confirm(mailAsk(S.week,null,true)))break;t.disabled=true;t.textContent="Godkender og sender …";if(await doGodk())await doSendKlar();render();break;}
+    case "q-copy":if(S.q){S.q.copy=t.dataset.v==="1";S.moveCopy=S.q.copy;drawQuick();}break;
     case "theme":{const light=document.documentElement.dataset.theme!=="light";if(light)document.documentElement.dataset.theme="light";else delete document.documentElement.dataset.theme;try{localStorage.setItem("sl-theme",light?"light":"dark");}catch(e){}const b=$("#thbtn");if(b)b.textContent=light?"☾":"☀︎";render();break;}
     case "add-brk":{if(S.isOwner===false){toast("Kun ejeren kan oprette breaks");break;}const tp=t.dataset.t;const same=S.cfg.breaks.filter(b=>b.type===tp);const src=same[0]||{perDag:4,bumper:0,buffer:0,maks:0};
       let n=1;const ids=new Set(S.cfg.breaks.map(b=>b.id));while(ids.has("X"+TPRE[tp]+n))n++;

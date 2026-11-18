@@ -76,5 +76,8 @@ if(LOGO_URL){const sw=()=>{const w=document.getElementById("wm");if(!w)return;co
   async function deleteBreak(id){pending++;try{await call("deleteBreak",id);}finally{pending--;}await load();}
   // Send "ugen er klar"-mail til alle i fanen Brugere (via Apps Script / firmaets Google-konto)
   async function sendKlar(o){pending++;try{const r=await call("sendKlar",o);st.mails=st.mails||{};st.mails[r.key]={at:r.at,by:r.by,n:r.n,test:r.test||""};st.mailTest=r.test||"";emit();return r;}finally{pending--;}}
+  // Hvilken Code.gs kører serveren? (vises under ⚙). Gammel kode kender ikke "ping".
+  st.serverVersion=null;
+  fetch(API_URL,{method:"POST",headers:{"Content-Type":"text/plain;charset=utf-8"},body:JSON.stringify({action:"ping"})}).then(r=>r.json()).then(j=>{st.serverVersion=j&&j.ok?j.data.serverVersion:"gammel";emit();}).catch(()=>{});
   window.__gas={st,load,deleteBreak,sendKlar};
 })();
